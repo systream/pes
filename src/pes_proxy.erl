@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 -module(pes_proxy).
 
-% @TODO different nodes can have different amount of servers, and it does not work!
+% @TODO different nodes can have different amount of servers, and it does not work!!! :/
 
 -type id() :: term().
 -type consensus_term() :: pos_integer().

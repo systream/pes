@@ -31,6 +31,6 @@ init([]) ->
 %% internal functions
 
 shard_count() ->
-  application:get_env(pes, shard_count, erlang:system_info(schedulers_online)*10).
+    application:get_env(pes, shard_count, erlang:system_info(schedulers_online)).
 
 

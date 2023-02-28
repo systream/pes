@@ -3,17 +3,6 @@
 %% API
 -export([test/4, test/3, on_all_nodes/4]).
 
-% this is "gond" (two nodes can register at the same time):
-  % NodeA read -> not_found
-  % NodeB read -> not_found
-  % NodeA prepare -> {1, p1} -> ack
-  % NodeB prepare -> {1, p1} -> nack
-  % NodeB read -> not found
-  % NodeA commit -> {1, p1} -> ack
-  % NodeB prepare -> {2, p2} -> ack
-  % NodeB commit -> {2, p2} -> ack
-  %
-
 on_all_nodes(Concurrency, KeySpace, ProcessMaxAliveTime, Count) ->
   Nodes = ['1@Peters-MacBook-Pro', '2@Peters-MacBook-Pro', '3@Peters-MacBook-Pro'],
   [net_kernel:connect_node(N) || N <- Nodes],
