@@ -1,0 +1,298 @@
+-module(pes_SUITE).
+-compile(export_all).
+-compile(nowarn_export_all).
+
+-include_lib("common_test/include/ct.hrl").
+-include_lib("eunit/include/eunit.hrl").
+
+%%--------------------------------------------------------------------
+%% COMMON TEST CALLBACK FUNCTIONS
+%%--------------------------------------------------------------------
+
+-define(TEST_PROCESS(TTL), spawn(fun() -> timer:sleep(TTL) end)).
+-define(TEST_PROCESS_TIMEOUT, 2000).
+-define(TEST_HEARTBEAT_TIMEOUT, 500).
+
+suite() ->
+  [{timetrap, {minutes, 10}}].
+
+init_per_suite(Config) ->
+  {ok, _} = application:ensure_all_started(pes),
+  application:set_env(pes, process_timeout, ?TEST_PROCESS_TIMEOUT),
+  application:set_env(pes, heartbeat, ?TEST_HEARTBEAT_TIMEOUT),
+  Config.
+
+end_per_suite(_Config) ->
+  application:stop(pes),
+  ok.
+
+init_per_group(GroupName, Config) ->
+  ?MODULE:GroupName({setup, Config}).
+
+end_per_group(GroupName, Config) ->
+  ?MODULE:GroupName({tear_down, Config}).
+
+init_per_testcase(_TestCase, Config) ->
+  Config.
+
+end_per_testcase(_TestCase, _Config) ->
+  ok.
+
+groups() ->
+  [{ cluster_group, [ { repeat_until_any_fail, 1}],
+    [
+      register_no_majority,
+      register_one_node_not_up_to_date,
+      register_previous_record_expired,
+      register_previous_record_expired_but_alive
+    ]
+  }].
+
+all() ->
+  [
+    pes_server,
+    pes_server_live_upgrade,
+    register,
+    re_register,
+    register_already_running,
+    register_monitored_process_died,
+    register_died_process,
+    register_guard_process_died,
+    send_undefined,
+    send_ok,
+    unregister_undefined,
+    {group, cluster_group}
+  ].
+
+pes_server(_Config) ->
+  Id = <<"pes_server_test_case">>,
+
+  % no record but commit
+  ?assertEqual(nack, pes_call(commit, [node(), Id, 1, test])),
+
+  % no record
+  ?assertEqual(ack, pes_call(prepare, [node(), Id, 1])),
+  % skip term
+  ?assertEqual(ack, pes_call(prepare, [node(), Id, 122])),
+  % Lower term
+  ?assertEqual(nack, pes_call(prepare, [node(), Id, 2])),
+
+  % commit success
+  ack = pes_call(prepare, [node(), Id, 250]),
+  ?assertEqual(ack, pes_call(commit, [node(), Id, 250, test2])),
+
+  % lower term for commit
+  ack = pes_call(prepare, [node(), Id, 252]),
+  ?assertEqual(nack, pes_call(commit, [node(), Id, 251, test3])),
+
+  % higher term for commit
+  ack = pes_call(prepare, [node(), Id, 255]),
+  ?assertEqual(nack, pes_call(commit, [node(), Id, 256, test3])),
+
+  % concurrent
+  ?assertEqual(ack, pes_call(prepare, [node(), Id, 1000])),
+  ?assertEqual(ack, pes_call(prepare, [node(), Id, 1001])),
+  ?assertEqual(nack, pes_call(commit, [node(), Id, 1000, test])),
+  ?assertEqual(nack, pes_call(prepare, [node(), Id, 1001])),
+  ?assertEqual(ack, pes_call(commit, [node(), Id, 1001, test])),
+  ok.
+
+pes_server_live_upgrade(_Config) ->
+  {_, Pid, worker, _} = hd(supervisor:which_children(pes_proxy)),
+  ok = sys:suspend(Pid),
+  ok = sys:change_code(Pid, pes_server, undefined, []),
+  ok = sys:resume(Pid),
+  sys:terminate(Pid, violent),
+  ok.
+
+register(_Config) ->
+  TestPid = ?TEST_PROCESS(1000),
+  Id = <<"reg_1">>,
+  ?assertEqual(yes, pes:register_name(Id, TestPid)),
+  ?assertEqual(TestPid, pes:whereis_name(Id)),
+  ?assertEqual(ok, pes:unregister_name(Id)),
+  ?assertEqual(undefined, pes:whereis_name(Id)),
+  ok.
+
+re_register(_Config) ->
+  TestPidA = ?TEST_PROCESS(1000),
+  TestPidB = ?TEST_PROCESS(1000),
+  Id = <<"re_reg_1">>,
+  ?assertEqual(yes, pes:register_name(Id, TestPidA)),
+  ?assertEqual(ok, pes:unregister_name(Id)),
+  ?assertEqual(undefined, pes:whereis_name(Id)),
+  ?assertEqual(yes, pes:register_name(Id, TestPidB)),
+  ?assertEqual(TestPidB, pes:whereis_name(Id)),
+  ok.
+
+register_already_running(_Config) ->
+  TestPid = ?TEST_PROCESS(1000),
+  Id = <<"reg_already_running">>,
+  ?assertEqual(yes, pes:register_name(Id, TestPid)),
+  ?assertEqual(no, pes:register_name(Id, TestPid)),
+  ok.
+
+register_monitored_process_died(_Config) ->
+  TestPid = ?TEST_PROCESS(1000),
+  Id = <<"proc_died">>,
+  ?assertEqual(yes, pes:register_name(Id, TestPid)),
+  exit(TestPid, kill),
+  % need some to to process down messages
+  ct:sleep(10),
+  ?assertEqual(undefined, pes:whereis_name(Id)),
+  ok.
+
+register_died_process(_Config) ->
+  TestPid = ?TEST_PROCESS(0),
+  Id = <<"proc_alrady_died">>,
+  ct:sleep(1),
+  ?assertEqual(no, pes:register_name(Id, TestPid)),
+  ok.
+
+register_guard_process_died(_Config) ->
+  TestPid = ?TEST_PROCESS(1000),
+  Id = <<"procs_reg_guard_died_1">>,
+  ?assertEqual(yes, pes:register_name(Id, TestPid)),
+  {ok, _Term, {TestPid, GuardPid, _Ts}} = pes_promise:await(pes_proxy:read(node(), Id)),
+  exit(GuardPid, kill),
+  % need to wait the timeout threshold time
+  ct:sleep(?TEST_PROCESS_TIMEOUT+5),
+  ?assertEqual(undefined, pes:whereis_name(Id)),
+  ok.
+
+send_undefined(_Config) ->
+  % non exist
+  ?assertException(exit, {badarg, {unknown_reg_pid, test}}, pes:send(unknown_reg_pid, test)),
+
+  % stopped
+  yes = pes:register_name(send_undefined, ?TEST_PROCESS(1000)),
+  ok = pes:unregister_name(send_undefined),
+  ?assertException(exit, {badarg, {send_undefined, test}}, pes:send(send_undefined, test)),
+
+  % died
+  yes = pes:register_name(send_undefined2, ?TEST_PROCESS(6)),
+  ct:sleep(15),
+  ?assertException(exit, {badarg, {send_undefined2, test}}, pes:send(send_undefined2, test)).
+
+send_ok(_Config) ->
+  S = self(),
+  Id = <<"send_ok">>,
+  Pid = spawn(fun() -> receive Msg -> S ! {echo, Id, self(), Msg} end end),
+  yes = pes:register_name(Id, Pid),
+  pes:send(Id, test_msg),
+  receive
+    {echo, Id, Pid, EchoMsg} ->
+      ?assertEqual(test_msg, EchoMsg)
+  after 1000 ->
+    ?assert(false, "echo message not came back")
+  end.
+
+unregister_undefined(_Config) ->
+  ?assertEqual(ok, pes:unregister_name(not_registered)).
+
+cluster_group({setup, Config}) ->
+  {ok, Node1} = pes_test_cluster:start_node(node_1),
+  {ok, Node2} = pes_test_cluster:start_node(node_2),
+  ok = pes_cluster:join(Node1),
+  ok = pes_cluster:join(Node2),
+  [{nodes, [Node1, Node2]} | Config];
+cluster_group({tear_down, Config}) ->
+  Nodes = proplists:get_value(nodes, Config),
+  [pes_test_cluster:stop_node(Node) || Node <- Nodes].
+
+register_no_majority(Config) ->
+  [NodeA, NodeB] = proplists:get_value(nodes, Config),
+  NodeC = node(),
+  Id = <<"no_consensus">>,
+  % pre set 3 different data on 3 different node
+
+  TestPid1 = ?TEST_PROCESS(1000),
+  TestPid2 = ?TEST_PROCESS(1000),
+  TestPid3 = ?TEST_PROCESS(1000),
+
+  fake_entry(NodeA, Id, 1, TestPid1),
+  fake_entry(NodeB, Id, 1, TestPid2),
+  fake_entry(NodeC, Id, 1, TestPid3),
+
+  ActualProc = ?TEST_PROCESS(1000),
+
+  ?assertEqual(yes, pes:register_name(Id, ActualProc)),
+  ?assertEqual(ActualProc, pes:whereis_name(Id)),
+  ok.
+
+register_one_node_not_up_to_date(Config) ->
+  [NodeA, NodeB] = proplists:get_value(nodes, Config),
+  NodeC = node(),
+  Id = <<"not_up_to_data">>,
+  % pre set 3 different data on 3 different node
+  GuardPidA = ?TEST_PROCESS(10),
+  GuardPidB = ?TEST_PROCESS(1000),
+
+  TestPidA = ?TEST_PROCESS(1000),
+  TestPidB = ?TEST_PROCESS(1000),
+
+  fake_entry(NodeA, Id, 1, GuardPidA, TestPidA, pes_time:now()-1200),
+  fake_entry(NodeB, Id, 2, GuardPidB, TestPidB, pes_time:now()),
+  fake_entry(NodeC, Id, 2, GuardPidB, TestPidB, pes_time:now()),
+
+  ActualProc = ?TEST_PROCESS(1000),
+
+  ?assertEqual(no, pes:register_name(Id, ActualProc)),
+  ?assertEqual(TestPidB, pes:whereis_name(Id)),
+  ok.
+
+register_previous_record_expired(Config) ->
+  [NodeA, NodeB] = proplists:get_value(nodes, Config),
+  NodeC = node(),
+  Id = <<"prev_expired">>,
+  % pre set 3 different data on 3 different node
+  GuardPidA = ?TEST_PROCESS(0),
+  TestPidA = ?TEST_PROCESS(0),
+
+  Expired = pes_time:now() - 50000,
+
+  fake_entry(NodeA, Id, 1, GuardPidA, TestPidA, Expired),
+  fake_entry(NodeB, Id, 2, GuardPidA, TestPidA, Expired),
+  fake_entry(NodeC, Id, 2, GuardPidA, TestPidA, Expired),
+  ct:sleep(1),
+  ActualProc = ?TEST_PROCESS(1000),
+
+  ?assertEqual(undefined, pes:whereis_name(Id)),
+  ?assertEqual(yes, pes:register_name(Id, ActualProc)),
+  ?assertEqual(ActualProc, pes:whereis_name(Id)),
+  ok.
+
+register_previous_record_expired_but_alive(Config) ->
+  [NodeA, NodeB] = proplists:get_value(nodes, Config),
+  NodeC = node(),
+  Id = <<"prev_expired_but_alive">>,
+  % pre set 3 different data on 3 different node
+  GuardPidA = ?TEST_PROCESS(0),
+  TestPidA = ?TEST_PROCESS(1000),
+
+  Expired = pes_time:now() - 50000,
+
+  fake_entry(NodeA, Id, 2, GuardPidA, TestPidA, Expired),
+  fake_entry(NodeB, Id, 2, GuardPidA, TestPidA, Expired),
+  fake_entry(NodeC, Id, 2, GuardPidA, TestPidA, Expired),
+  ActualProc = ?TEST_PROCESS(1000),
+
+  ?assertEqual(undefined, pes:whereis_name(Id)),
+  ?assertEqual(no, pes:register_name(Id, ActualProc)),
+  ok.
+
+pes_call(Function, Args) ->
+  pes_promise:await(apply(pes_proxy, Function, Args)).
+
+
+fake_entry(Node, Id, Term, Pid) ->
+  fake_entry(Node, Id, Term, ?TEST_PROCESS(0), Pid, pes_time:now()).
+
+fake_entry(Node, Id, Term, GuardProcess, Pid, Ts) ->
+  S = self(),
+  P = spawn_link(fun() ->
+      pes_proxy:prepare(Node, Id, {Term, GuardProcess}),
+      pes_proxy:commit(Node, Id, {Term, GuardProcess}, {Pid, GuardProcess, Ts}),
+      S ! {self(), done}
+    end),
+  receive {P, done} -> ok end.
