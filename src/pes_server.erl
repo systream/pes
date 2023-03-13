@@ -18,7 +18,7 @@
 -compile({no_auto_import, [register/2, is_process_alive/1, send/2]}).
 
 %% API
--export([prepare/3, commit/4, read/2]).
+-export([prepare/3, commit/4, read/2, repair/5]).
 
 -export([start_link/1, init/1, loop/1]).
 -export([system_continue/3, system_terminate/4, system_get_state/1, system_code_change/4]).
@@ -50,6 +50,11 @@ commit(Node, Id, Term, Value) ->
 -spec read(target(), id()) -> pes_promise:promise().
 read(Node, Id) ->
   async(Node, {read, Id}).
+
+-spec repair(target(), id(), consensus_term_proposal(), consensus_term_proposal(), value()) ->
+  pes_promise:promise().
+repair(Node, Id, CurrentTerm, NewTerm, Value) ->
+  async(Node, {repair, Id, CurrentTerm, NewTerm, Value}).
 
 -spec async(target(), term()) -> pes_promise:promise().
 async({Server, Node}, Command) ->
@@ -96,6 +101,21 @@ handle_command({commit, Id, {Term, Server}, Value}, #state{data_storage_ref = DS
                                                            term_storage_ref = TSR}) ->
   case ets:lookup(TSR, Id) of
     [{Id, {StoredTerm, StoredServer}}] when StoredTerm =:= Term andalso StoredServer =:= Server ->
+      true = ets:insert(DSR, {Id, {Term, Value}}),
+      ack;
+    [{Id, {StoredTerm, StoredServer}}] ->
+      {nack, {node(), {StoredTerm, StoredServer}}};
+    [] ->
+      {nack, {node(), not_found}}
+  end;
+% Commit can reply with nack and the actual term, server data.
+% To ensure in the mean time no other registration attempt were made, we send back those values.
+handle_command({repair, Id, Term, NewTern, Value}, #state{data_storage_ref = DSR,
+                                                          term_storage_ref = TSR}) ->
+  case ets:lookup(TSR, Id) of
+    [{Id, StoredTerm}] when StoredTerm =:= Term -> % the term matches
+      io:format(user, "repaied: ~p -> ~p - ~p ~n", [Id, NewTern, Value]),
+      true = ets:insert(TSR, {Id, NewTern}),
       true = ets:insert(DSR, {Id, {Term, Value}}),
       ack;
     _ ->

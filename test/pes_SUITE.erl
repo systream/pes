@@ -67,8 +67,9 @@ all() ->
 pes_server(_Config) ->
   Id = <<"pes_server_test_case">>,
 
+  _Node = node(),
   % no record but commit
-  ?assertEqual(nack, pes_call(commit, [node(), Id, 1, test])),
+  ?assertEqual({nack, {node(), not_found}}, pes_call(commit, [node(), Id, 1, test])),
 
   % no record
   ?assertEqual(ack, pes_call(prepare, [node(), Id, 1])),
@@ -83,16 +84,16 @@ pes_server(_Config) ->
 
   % lower term for commit
   ack = pes_call(prepare, [node(), Id, 252]),
-  ?assertEqual(nack, pes_call(commit, [node(), Id, 251, test3])),
+  ?assertEqual({nack, {node(), {252, self()}}}, pes_call(commit, [node(), Id, 251, test3])),
 
   % higher term for commit
   ack = pes_call(prepare, [node(), Id, 255]),
-  ?assertEqual(nack, pes_call(commit, [node(), Id, 256, test3])),
+  ?assertEqual({nack, {node(), {255, self()}}}, pes_call(commit, [node(), Id, 256, test3])),
 
   % concurrent
   ?assertEqual(ack, pes_call(prepare, [node(), Id, 1000])),
   ?assertEqual(ack, pes_call(prepare, [node(), Id, 1001])),
-  ?assertEqual(nack, pes_call(commit, [node(), Id, 1000, test])),
+  ?assertEqual({nack, {node(), {1001, self()}}}, pes_call(commit, [node(), Id, 1000, test])),
   ?assertEqual(nack, pes_call(prepare, [node(), Id, 1001])),
   ?assertEqual(ack, pes_call(commit, [node(), Id, 1001, test])),
   ok.

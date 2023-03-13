@@ -5,10 +5,11 @@
   {mod, {pes_app, []}},
   {applications,
    [kernel,
-    stdlib
+    stdlib,
+    simple_gossip
    ]},
   {env,[]},
   {modules, []},
-  {licenses, ["Apache 2.0"]},
+  {licenses, ["MIT"]},
   {links, []}
  ]}.

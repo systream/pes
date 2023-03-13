@@ -20,13 +20,19 @@ init([]) ->
   SupFlags = #{strategy => one_for_all,
                intensity => 5,
                period => 10},
-  Acceptor = #{id => server_cluster,
+  Cluster = #{id => cluster,
+              start => {pes_cluster, start_link, []},
+              restart => permanent,
+              shutdown => 1000,
+              type => worker,
+              modules => [pes_cluster]},
+  Acceptor = #{id => pes_server_cluster,
                start => {pes_proxy, start_link, [shard_count()]},
                restart => permanent,
                shutdown => 5000,
                type => supervisor,
                modules => [pes_proxy, pes_server]},
-    {ok, {SupFlags, [Acceptor]}}.
+    {ok, {SupFlags, [Cluster, Acceptor]}}.
 
 %% internal functions
 

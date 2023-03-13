@@ -7,13 +7,13 @@
 %%%-------------------------------------------------------------------
 -module(pes_proxy).
 
-% @TODO different nodes can have different amount of servers, and it does not work!!! :/
+% @TODO different nodes can have different pes_server shard count, and it does not work!!! :/
 
 -type id() :: term().
 -type consensus_term() :: pos_integer().
 -type consensus_term_proposal() :: {consensus_term(), {node(), pid()}} | consensus_term().
 
--export([start_link/1, prepare/3, commit/4, read/2]).
+-export([start_link/1, prepare/3, commit/4, read/2, repair/5]).
 
 -export([init/1]).
 
@@ -31,13 +31,19 @@ commit(Node, Id, Term, Value) ->
 read(Node, Id) ->
   pes_server:read({hash(Id), Node}, Id).
 
+-spec repair(node(), id(), consensus_term_proposal(), consensus_term_proposal(), term()) ->
+  pes_promise:promise().
+repair(Node, Id, OldTerm, NewTerm, Value) ->
+  pes_server:repair({hash(Id), Node}, Id, OldTerm, NewTerm, Value).
+
 start_link(ServerCount) ->
   supervisor:start_link({local, ?SERVER}, ?MODULE, ServerCount).
 
 init(ServerCount) ->
   SupFlags = #{strategy => one_for_one,
-    intensity => 5,
-    period => 10},
+               intensity => 5,
+               period => 10
+             },
   ServerNames = [name(I) || I <- lists:seq(0, ServerCount-1)],
   persistent_term:put({?MODULE, servers}, ServerNames),
   {ok, {SupFlags, [child_spec(Name) || Name <- ServerNames]}}.
@@ -61,4 +67,3 @@ servers() ->
 hash(Id) ->
   Servers = servers(),
   lists:nth(erlang:phash2(Id, length(Servers))+1, Servers).
-

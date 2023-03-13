@@ -32,8 +32,8 @@ prop_test() ->
   TickTime = 3,
   io:format(user, "~nNet tick time se to ~p", [TickTime]),
   rpc:multicall([node() | Nodes], net_kernel, set_net_ticktime, [TickTime, 10]),
-  io:format(user, "~nSet cluster nodes to ~p", [Nodes]),
-  rpc:multicall(Nodes, persistent_term, put, [{pes_cluster, nodes}, Nodes]),
+
+  [pes_cluster:join(Node) || Node <- Nodes],
 
   %io:format(user, "~n", []),
   %{group_leader, GLPid} = erlang:process_info(self(), group_leader),
@@ -67,12 +67,15 @@ extract_command_names(Cmds) ->
 %%%%%%%%%%%%%
 %% @doc Initial model value at system start. Should be deterministic.
 initial_state(#{nodes := Nodes}) ->
-    #{nodes => Nodes, processes => #{}, islands => []}.
+  io:format(user, "epmd: status: ~p~n", [epmdpxy:status()] ),
+  #{nodes => Nodes, processes => #{}, islands => []}.
 
 %% @doc List of possible commands to run against the system
 command(#{nodes := Nodes} = State) ->
     frequency([
-      {100, {call, rpc, call, [oneof(Nodes), pes_acceptor2, register, [key(), process()]]}},
+      {100, {call, rpc, call, [oneof(Nodes), pes, register_name, [key(), process()]]}},
+      {40, {call, rpc, call, [oneof(Nodes), pes, unregister_name, [key()]]}},
+      {100, {call, rpc, call, [oneof(Nodes), pes, whereis_name, [key()]]}},
       {13, {call, ?MODULE, fix_connections, [State]}},
       {1, {call, ?MODULE, cut_connections, [islands(Nodes)]}}
     ]).
@@ -155,11 +158,3 @@ fix(IslandA, IslandB) ->
   ok = epmdpxy:fix_cables(IslandA, IslandB),
   %timer:sleep(5),
   ok.
-
-set_group_leader(Node, Gl) ->
-  Pid = rpc:call(Node, erlang, whereis, [pes_acceptor2]),
-  %User = whereis(user), erlang:unregister(user), erlang:register(user, User).
-  %spawn(Node, fun() -> erlang:unregister(user), erlang:register(user, Gl) end),
-  %rpc:call(Node, erlang, register, [main_io, Gl]),
-  true = rpc:call(Node, erlang, group_leader, [Gl, Pid]),
-  io:format(user, "Group leader for ~p on ~p set to ~p~n", [Pid, Node, Gl]).

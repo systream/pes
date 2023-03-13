@@ -5,8 +5,7 @@
 
 on_all_nodes(Concurrency, KeySpace, ProcessMaxAliveTime, Count) ->
   Nodes = ['1@Peters-MacBook-Pro', '2@Peters-MacBook-Pro', '3@Peters-MacBook-Pro'],
-  [net_kernel:connect_node(N) || N <- Nodes],
-  rpc:multicall(persistent_term, put, [{pes_cluster, nodes}, Nodes]),
+  [pes_cluster:join(N) || N <- Nodes],
   rpc:multicall(?MODULE, test, [Concurrency, KeySpace, ProcessMaxAliveTime, Count]).
 
 test(Concurrency, KeySpace, ProcessMaxAliveTime, Count) ->

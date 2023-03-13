@@ -11,7 +11,7 @@
 -compile({no_auto_import, [is_process_alive/1]}).
 -include_lib("pes_promise.hrl").
 
--define(DEFAULT_HEARTBEAT, 2048).
+-define(DEFAULT_HEARTBEAT, 3072).
 
 %-define(trace(Msg, Args), io:format(user, Msg ++ "~n", Args)).
 -define(trace(Msg, Args, Id), logger:warning(Msg, Args, #{node => node(), cid => Id, state_name => erlang:get(state_name)})).
@@ -67,7 +67,7 @@ init({Id, Pid, Caller}) ->
   erlang:monitor(process, Pid),
   %process_flag(trap_exit, true),
   Nodes = pes_cluster:nodes(),
-  Majority = (length(Nodes) div 2) + 1,
+  Majority = majority(Nodes),
   {ok, reg_check, #state{id = Id, caller = Caller, pid = Pid, nodes = Nodes, majority = Majority}}.
 
 -spec callback_mode() -> [handle_event_function | state_enter].
@@ -94,7 +94,7 @@ handle_event(info, {'DOWN', _Ref, process, Pid, Reason}, StateName, #state{pid =
     _ -> {stop, {registered_process_died, Pid, Reason, StateName}, State}
   end;
 handle_event({call, From}, stop, StateName, #state{id = Id, term = Term, nodes = Nodes} = State) ->
-  % ties to unregister from catalog
+  % tries to unregister from catalog
   %?trace("Registered process ~p down ~p --> ~p", [Pid, Reason, StateName], Id),
   % If the server not in monitoring, or update state client should be notfied
   case StateName of
@@ -154,12 +154,14 @@ handle_event(state_timeout, monitoring, registered, State = #state{}) ->
   {next_state, monitoring, State};
 
 % heartbeat
-handle_event(enter, _, monitoring, State = #state{id = Id, nodes = Nodes, term = Term, pid = Pid}) ->
+handle_event(enter, _, monitoring, State = #state{id = Id, term = Term, pid = Pid}) ->
   %?trace("Entered monitoring", [], State#state.id),
   put(state_name, monitoring),
   Data = {Pid, self(), pes_time:now()},
   HeartBeat = application:get_env(pes, heartbeat, ?DEFAULT_HEARTBEAT),
-  {keep_state, set_promises([commit(Node, Id, Term, Data) || Node <- Nodes], State), [{state_timeout, HeartBeat, heartbeat}]};
+  Nodes = pes_cluster:nodes(),
+  NewState = set_nodes(State, Nodes),
+  {keep_state, set_promises([commit(Node, Id, Term, Data) || Node <- Nodes], NewState), [{state_timeout, HeartBeat, heartbeat}]};
 handle_event(state_timeout, heartbeat, monitoring, #state{replies = Replies, majority = Majority} = State) ->
   %?trace("[monitoring] heartbeat timeout", [], State#state.id),
   case evaluate_replies(Replies, Majority) of
@@ -169,13 +171,16 @@ handle_event(state_timeout, heartbeat, monitoring, #state{replies = Replies, maj
       ?trace("cannot_renew timeout ~p", [_Answer], State#state.id),
       {stop, cannot_renew_pid_timeout, State}
   end;
+handle_event(info, #promise_reply{result = {nack, {Server, OldTerm}}} = Reply, monitoring,
+              State = #state{id = Id, term = Term, pid = Pid}) ->
+  % we are in monitoring phase se we can do repair because we have the majority
+  repair(Server, Id, OldTerm, Term, {Pid, self(), pes_time:now()}),
+  handle_event(info, Reply, monitoring, State);
 handle_event(info, #promise_reply{ref = Ref, result = Response} = Reply, monitoring, State) ->
   pes_promise:resolved(Reply),
   handle_update_responses(Ref, Response, State);
 handle_event(info, {'DOWN', Ref, process, _Pid, Reason}, monitoring, State) ->
   handle_update_responses(Ref, {error, Reason}, State);
-
-
 
 % we need to just drop late messages, these messages can be dropped
 handle_event(info, #promise_reply{} = Reply, _StateName, _State) ->
@@ -270,6 +275,8 @@ handle_update_responses(Ref, Reply, State) ->
       {stop, {cannot_renew_pid, Reason, State#state.id}, NewState}
   end.
 
+evaluate_response(Ref, {nack, _}, State) ->
+  evaluate_response(Ref, nack, State);
 evaluate_response(Ref, Result, State = #state{replies = Replies,
                                               majority = Majority,
                                               promises = Promises}) ->
@@ -295,7 +302,7 @@ evaluate_response(Ref, Result, State = #state{replies = Replies,
           {keep_state, NewState}
       end;
     _ ->
-      {keep_state, State#state{promises = lists:delete({promise, Ref}, Promises)}}
+      {keep_state, State}
   end.
 
 increase_term(#state{term = Term} = State) ->
@@ -319,11 +326,14 @@ prepare(Node, Id, Term) ->
 commit(Node, Id, Term, Value) ->
   pes_proxy:commit(Node, Id, encapsulate_term(Term), Value).
 
+repair(Node, Id, OldTerm, NewTerm, Value) ->
+  pes_proxy:repair(Node, Id, OldTerm, encapsulate_term(NewTerm), Value).
+
 encapsulate_term(Term) ->
   {Term, self()}.
 
 reply(#state{caller = Caller}, Response) ->
-  erlang:send(Caller, {'$reply', self(), Response}).
+  erlang:send(Caller, {'$reply', self(), Response}, [nosuspend, noconnect]).
 
 wait(Id, Pid, Rand) ->
   % Each node/pid/id combo has a weight, how much likely to run on that node,
@@ -337,3 +347,9 @@ evaluate_replies(Replies, Majority) ->
                (_Result, _VoteCount, Acc) ->
                   Acc
             end, no_consensus, Replies).
+
+majority(Nodes) ->
+  (length(Nodes) div 2) + 1.
+
+set_nodes(State, Nodes) ->
+  State#state{nodes = Nodes, majority = majority(Nodes)}.
