@@ -10,7 +10,8 @@
 -include_lib("pes_promise.hrl").
 
 %% API
--export([register_name/2, unregister_name/1, whereis_name/1, send/2]).
+-export([register_name/2, unregister_name/1, whereis_name/1, send/2,
+         join/1, leave/1]).
 
 -spec register_name(Name, Pid) -> 'yes' | 'no' when
   Name :: term(),
@@ -100,3 +101,11 @@ send(Name, Msg) ->
     undefined ->
       exit({badarg, {Name, Msg}})
   end.
+
+-spec join(node()) -> ok.
+join(Node) ->
+  pes_cluster:join(Node).
+
+-spec leave(node()) -> ok.
+leave(Node) ->
+  pes_cluster:leave(Node).

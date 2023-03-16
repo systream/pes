@@ -11,7 +11,7 @@
 -compile({no_auto_import, [is_process_alive/1]}).
 -include_lib("pes_promise.hrl").
 
--define(DEFAULT_HEARTBEAT, 3072).
+-define(DEFAULT_HEARTBEAT, 8048).
 
 %-define(trace(Msg, Args), io:format(user, Msg ++ "~n", Args)).
 -define(trace(Msg, Args, Id), logger:warning(Msg, Args, #{node => node(), cid => Id, state_name => erlang:get(state_name)})).
@@ -158,7 +158,7 @@ handle_event(enter, _, monitoring, State = #state{id = Id, term = Term, pid = Pi
   %?trace("Entered monitoring", [], State#state.id),
   put(state_name, monitoring),
   Data = {Pid, self(), pes_time:now()},
-  HeartBeat = application:get_env(pes, heartbeat, ?DEFAULT_HEARTBEAT),
+  HeartBeat = application:get_env(pes, heartbeat, ?DEFAULT_HEARTBEAT) + rand:uniform(10),
   Nodes = pes_cluster:nodes(),
   NewState = set_nodes(State, Nodes),
   {keep_state, set_promises([commit(Node, Id, Term, Data) || Node <- Nodes], NewState), [{state_timeout, HeartBeat, heartbeat}]};
@@ -175,7 +175,7 @@ handle_event(info, #promise_reply{result = {nack, {Server, OldTerm}}} = Reply, m
               State = #state{id = Id, term = Term, pid = Pid}) ->
   % we are in monitoring phase se we can do repair because we have the majority
   repair(Server, Id, OldTerm, Term, {Pid, self(), pes_time:now()}),
-  handle_event(info, Reply, monitoring, State);
+  handle_event(info, Reply#promise_reply{result = nack}, monitoring, State);
 handle_event(info, #promise_reply{ref = Ref, result = Response} = Reply, monitoring, State) ->
   pes_promise:resolved(Reply),
   handle_update_responses(Ref, Response, State);

@@ -33,7 +33,7 @@ prop_test() ->
   io:format(user, "~nNet tick time se to ~p", [TickTime]),
   rpc:multicall([node() | Nodes], net_kernel, set_net_ticktime, [TickTime, 10]),
 
-  [pes_cluster:join(Node) || Node <- Nodes],
+  [pes:join(Node) || Node <- Nodes],
 
   %io:format(user, "~n", []),
   %{group_leader, GLPid} = erlang:process_info(self(), group_leader),

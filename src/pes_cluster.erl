@@ -32,7 +32,7 @@ leave(Node) ->
 -spec(start_link() ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link() ->
-  {ok, proc_lib:spawn_link(?MODULE, init, [])}.
+  {ok, spawn_link(?MODULE, init, [])}.
 
 -spec init() -> no_return().
 init() ->

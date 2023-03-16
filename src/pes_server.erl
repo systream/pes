@@ -114,11 +114,14 @@ handle_command({repair, Id, Term, NewTern, Value}, #state{data_storage_ref = DSR
                                                           term_storage_ref = TSR}) ->
   case ets:lookup(TSR, Id) of
     [{Id, StoredTerm}] when StoredTerm =:= Term -> % the term matches
-      io:format(user, "repaied: ~p -> ~p - ~p ~n", [Id, NewTern, Value]),
       true = ets:insert(TSR, {Id, NewTern}),
       true = ets:insert(DSR, {Id, {Term, Value}}),
       ack;
-    _ ->
+    [] when Term =:= not_found ->
+      true = ets:insert(TSR, {Id, NewTern}),
+      true = ets:insert(DSR, {Id, {Term, Value}}),
+      ack;
+    _E ->
       nack
   end.
 

@@ -13,6 +13,7 @@ start(_StartType, _StartArgs) ->
     pes_sup:start_link().
 
 stop(_State) ->
+    pes_cluster:leave(node()),
     ok.
 
 %% internal functions

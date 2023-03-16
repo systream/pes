@@ -13,6 +13,18 @@ gen_server:start({via, pes, <<"merlin">>}, wizard_mod, [], []).
 gen_server:call({via, pes, <<"merlin">>}, do_magic).
 ```
 
+## Forming a cluster
+
+Join to cluster:
+```erlang
+pes:join('node_b@serverfarm1').
+```
+
+Leave a node from cluster
+```erlang
+pes:leave('node_d@serverfarm1').
+```
+
 ## Concept
 Paxos like consensus algorithm.
 
