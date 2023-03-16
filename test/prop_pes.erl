@@ -67,16 +67,15 @@ extract_command_names(Cmds) ->
 %%%%%%%%%%%%%
 %% @doc Initial model value at system start. Should be deterministic.
 initial_state(#{nodes := Nodes}) ->
-  io:format(user, "epmd: status: ~p~n", [epmdpxy:status()] ),
   #{nodes => Nodes, processes => #{}, islands => []}.
 
 %% @doc List of possible commands to run against the system
 command(#{nodes := Nodes} = State) ->
     frequency([
-      {100, {call, rpc, call, [oneof(Nodes), pes, register_name, [key(), process()]]}},
+      {90, {call, rpc, call, [oneof(Nodes), pes, register_name, [key(), process()]]}},
       {40, {call, rpc, call, [oneof(Nodes), pes, unregister_name, [key()]]}},
-      {100, {call, rpc, call, [oneof(Nodes), pes, whereis_name, [key()]]}},
-      {13, {call, ?MODULE, fix_connections, [State]}},
+      {80, {call, rpc, call, [oneof(Nodes), pes, whereis_name, [key()]]}},
+      {26, {call, ?MODULE, fix_connections, [State]}},
       {1, {call, ?MODULE, cut_connections, [islands(Nodes)]}}
     ]).
 

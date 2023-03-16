@@ -4,18 +4,20 @@
 %%%-------------------------------------------------------------------
 
 -module(pes_sup).
-
 -behaviour(supervisor).
 
 -export([start_link/0]).
-
 -export([init/1]).
 
 -define(SERVER, ?MODULE).
+-define(DEFAULT_SHARD_COUNT, 8).
 
+-spec start_link() -> {'ok', pid()} | 'ignore' | {'error', term()}.
 start_link() ->
   supervisor:start_link({local, ?SERVER}, ?MODULE, []).
 
+-spec init([]) ->
+  {ok, {SupFlags :: supervisor:sup_flags(), [ChildSpec :: supervisor:child_spec()]}}.
 init([]) ->
   SupFlags = #{strategy => one_for_all,
                intensity => 5,
@@ -36,7 +38,8 @@ init([]) ->
 
 %% internal functions
 
+-spec shard_count() -> pos_integer().
 shard_count() ->
-    application:get_env(pes, shard_count, erlang:system_info(schedulers_online)).
+    application:get_env(pes, shard_count, ?DEFAULT_SHARD_COUNT).
 
 

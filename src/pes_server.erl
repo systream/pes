@@ -11,9 +11,11 @@
 
 -type id() :: term().
 -type consensus_term() :: pos_integer().
--type consensus_term_proposal() :: {consensus_term(), {node(), pid()}} | consensus_term().
+-type consensus_term_proposal() :: {consensus_term(), pid()} | consensus_term().
 -type value() :: term().
 -type target() :: node() | {atom(), node()}.
+
+-export_type([id/0, value/0, target/0, consensus_term/0, consensus_term_proposal/0]).
 
 -compile({no_auto_import, [register/2, is_process_alive/1, send/2]}).
 
@@ -29,13 +31,15 @@
 -define(SERVER, ?MODULE).
 
 -record(state, {
-  term_storage_ref ::reference(),
-  data_storage_ref :: reference()
+  term_storage_ref :: ets:tid(),
+  data_storage_ref :: ets:tid()
 }).
 
--type state() :: #state{}.
+-opaque state() :: #state{}.
+-export_type([state/0]).
 
--spec prepare(target(), id(), consensus_term_proposal()) -> pes_promise:promise().
+-spec prepare(pes_server:target(), pes_server:id(), pes_server:consensus_term_proposal()) ->
+  pes_promise:promise().
 prepare(Node, Id, {_, _} = Term) ->
   async(Node, {prepare, Id, Term});
 prepare(Node, Id, Term) ->
@@ -64,7 +68,7 @@ async({Server, Node}, Command) ->
 start_link(Server) ->
   proc_lib:start_link(?MODULE, init, [{Server, self()}]).
 
--spec init(pid()) -> no_return().
+-spec init({atom(), pid()}) -> no_return().
 init({Server, Parent}) ->
   true = erlang:register(Server, self()),
   proc_lib:init_ack(Parent, {ok, self()}),
@@ -110,16 +114,17 @@ handle_command({commit, Id, {Term, Server}, Value}, #state{data_storage_ref = DS
   end;
 % Commit can reply with nack and the actual term, server data.
 % To ensure in the mean time no other registration attempt were made, we send back those values.
-handle_command({repair, Id, Term, NewTern, Value}, #state{data_storage_ref = DSR,
-                                                          term_storage_ref = TSR}) ->
+handle_command({repair, Id, Term, {NewTermId, _} = NewTerm, Value},
+                #state{data_storage_ref = DSR,
+                       term_storage_ref = TSR}) ->
   case ets:lookup(TSR, Id) of
     [{Id, StoredTerm}] when StoredTerm =:= Term -> % the term matches
-      true = ets:insert(TSR, {Id, NewTern}),
-      true = ets:insert(DSR, {Id, {Term, Value}}),
+      true = ets:insert(TSR, {Id, NewTerm}),
+      true = ets:insert(DSR, {Id, {NewTermId, Value}}),
       ack;
     [] when Term =:= not_found ->
-      true = ets:insert(TSR, {Id, NewTern}),
-      true = ets:insert(DSR, {Id, {Term, Value}}),
+      true = ets:insert(TSR, {Id, NewTerm}),
+      true = ets:insert(DSR, {Id, {NewTermId, Value}}),
       ack;
     _E ->
       nack

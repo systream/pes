@@ -17,7 +17,7 @@ test(KeySpace, ProcessMaxAliveTime, Count) ->
   Process = fun() -> spawn(fun() -> sleep(ProcessMaxAliveTime) end) end,
   {Time, R} =
     timer:tc(fun() ->
-      [pes:register_name(100000+rand:uniform(KeySpace), Process()) || _I <- lists:seq(1, Count)]
+      [pes:register_name(100000 + rand:uniform(KeySpace), Process()) || _I <- lists:seq(1, Count)]
              end),
   io:format(user, "~n time: ~p C: ~p~n", [Time, Count]),
   io:format(user, "RPS: ~p~n", [Count / ((Time / 1000) / 1000)]),

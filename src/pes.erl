@@ -44,6 +44,8 @@ whereis_name(Name) ->
       undefined
   end.
 
+-spec lookup(term()) ->
+  undefined | {ok, {Pid :: pid(), GuardPid :: pid(), TimeStamp :: pos_integer()}} | timeout.
 lookup(Name) ->
   Parent = self(),
   P = spawn_link(fun() ->
@@ -74,7 +76,7 @@ wait_for_responses(Majority, Promises, Replies) ->
   receive
     #promise_reply{ref = Ref, result = Result} = Reply ->
       pes_promise:resolved(Reply),
-      ResultCount = maps:get(Result, Replies, 0)+1,
+      ResultCount = maps:get(Result, Replies, 0) + 1,
       case ResultCount >= Majority of
         true ->
           Result;
@@ -85,9 +87,7 @@ wait_for_responses(Majority, Promises, Replies) ->
       end;
     {'DOWN', Ref, process, _Pid, _Reason} ->
       wait_for_responses(Majority, lists:delete({promise, Ref}, Promises), Replies)
-
   end.
-
 
 -spec send(Name, Msg) -> Pid when
   Name :: term(),

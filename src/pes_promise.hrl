@@ -7,5 +7,3 @@
   ref :: reference(),
   result :: term()
 }).
-
--type pes_promise_reply() :: #promise_reply{}.

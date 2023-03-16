@@ -61,13 +61,13 @@ all() ->
     send_undefined,
     send_ok,
     unregister_undefined,
+    repair,
     {group, cluster_group}
   ].
 
 pes_server(_Config) ->
   Id = <<"pes_server_test_case">>,
 
-  _Node = node(),
   % no record but commit
   ?assertEqual({nack, {node(), not_found}}, pes_call(commit, [node(), Id, 1, test])),
 
@@ -190,6 +190,14 @@ send_ok(_Config) ->
 
 unregister_undefined(_Config) ->
   ?assertEqual(ok, pes:unregister_name(not_registered)).
+repair(_Config) ->
+  Id = repair_test,
+  Tp = ?TEST_PROCESS(1000),
+  fake_entry(node(), Id, 2, ?TEST_PROCESS(10)),
+  {nack, {Server, OldTerm}} = pes_call(commit, [node(), Id, 3, test2]),
+  pes_call(repair, [Server, Id, OldTerm, {3, self()}, {Tp, self(), pes_time:now()}]),
+  ?assertEqual(ack, pes_call(commit, [node(), Id, 3, test2])),
+  ok.
 
 cluster_group({setup, Config}) ->
   {ok, Node1} = pes_test_cluster:start_node(node_1),

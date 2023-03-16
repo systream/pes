@@ -6,7 +6,6 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(pes_cluster).
--author("Peter Tihanyi").
 
 -compile({no_auto_import, [nodes/0]}).
 
