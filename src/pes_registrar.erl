@@ -32,6 +32,7 @@
   majority :: pos_integer(),
   caller :: pid(),
   term = 1 :: pos_integer(),
+  last_timestamp = 0 :: pos_integer(),
   promises = [] :: [{promise, reference()}],
   replies = #{} :: #{}
 }).
@@ -155,11 +156,12 @@ handle_event(state_timeout, monitoring, registered, #state{} = State) ->
 handle_event(enter, _, monitoring, #state{id = Id, term = Term, pid = Pid} = State) ->
   %?trace("Entered monitoring", [], State#state.id),
   put(state_name, monitoring),
-  Data = {Pid, self(), pes_time:now()},
+  Now = pes_time:now(),
+  Data = {Pid, self(), Now},
   HeartBeat = application:get_env(pes, heartbeat, ?DEFAULT_HEARTBEAT) + rand:uniform(10),
   Nodes = pes_cluster:nodes(),
   NewState = set_promises([commit(Node, Id, Term, Data) || Node <- Nodes], set_nodes(State, Nodes)),
-  {keep_state, NewState, [{state_timeout, HeartBeat, heartbeat}]};
+  {keep_state, NewState#state{last_timestamp = Now}, [{state_timeout, HeartBeat, heartbeat}]};
 handle_event(state_timeout, heartbeat, monitoring, #state{replies = Replies,
                                                           majority = Majority} = State) ->
   case evaluate_replies(Replies, Majority) of
@@ -170,10 +172,9 @@ handle_event(state_timeout, heartbeat, monitoring, #state{replies = Replies,
       {stop, cannot_renew_pid_timeout, State}
   end;
 handle_event(info, #promise_reply{result = {nack, {Server, OldTerm}}} = Reply, monitoring,
-             #state{id = Id, term = Term, pid = Pid} = State) ->
-  % we are in monitoring phase se we can do repair because we have the majority
-  %@TODO now() is possible differs...
-  repair(Server, Id, OldTerm, Term, {Pid, self(), pes_time:now()}),
+             #state{id = Id, term = Term, pid = Pid, last_timestamp = Now} = State) ->
+  % we are in monitoring phase so we can do repair because we surely have the majority
+  repair(Server, Id, OldTerm, Term, {Pid, self(), Now}),
   handle_event(info, Reply#promise_reply{result = nack}, monitoring, State);
 handle_event(info, #promise_reply{ref = Ref, result = Response} = Reply, monitoring, State) ->
   pes_promise:resolved(Reply),
@@ -197,6 +198,9 @@ handle_read(Ref, Reply, State) ->
     {keep_state, NewState} ->
       {keep_state, NewState};
     {{no_consensus, _Replies}, NewState = #state{id = Id, pid = Pid}} ->
+      % @TODO is it possible that for example nodes joined the cluster and they have not found
+      % so we can get no consensus, this this situation will slow down registration process,
+      % but we need the higher term from the replies
       wait(Id, Pid, 16),
       {next_state, prepare, increase_term(NewState)};
     {{ok, GetTerm, {Pid, _GuardPid, Timestamp}}, NewState} ->

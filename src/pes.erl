@@ -80,7 +80,6 @@ lookup(Name, Retry) ->
   end.
 
 wait_for_responses(_Majority, [], _Replies) ->
-  io:format(user, "nc: ~p~n", [_Replies]),
   {error, no_consensus};
 wait_for_responses(Majority, Promises, Replies) ->
   receive
