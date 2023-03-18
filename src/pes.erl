@@ -9,6 +9,8 @@
 
 -include_lib("pes_promise.hrl").
 
+-define(DEFAULT_TIMEOUT, 5000).
+
 %% API
 -export([register_name/2, unregister_name/1, whereis_name/1, send/2,
          join/1, leave/1]).
@@ -30,7 +32,7 @@ unregister_name(Name) ->
   case lookup(Name) of
     undefined ->
       ok;
-    {ok, {_Pid, GuardPid, _Ts}} ->
+    {ok, {_Pid, GuardPid}} ->
       pes_registrar:unregister(GuardPid)
   end.
 
@@ -38,15 +40,21 @@ unregister_name(Name) ->
   Name :: term().
 whereis_name(Name) ->
   case lookup(Name) of
-    {ok, {Pid, _GuardPid, _Ts}} ->
+    {ok, {Pid, _GuardPid}} ->
       Pid;
     undefined ->
       undefined
   end.
 
 -spec lookup(term()) ->
-  undefined | {ok, {Pid :: pid(), GuardPid :: pid(), TimeStamp :: pos_integer()}} | timeout.
+  undefined | {ok, {Pid :: pid(), GuardPid :: pid(), TimeStamp :: pos_integer()}} |
+  {error, timeout | no_consensus}.
 lookup(Name) ->
+  lookup(Name, 3).
+
+-spec lookup(term(), non_neg_integer()) ->
+  undefined | {ok, {Pid :: pid(), GuardPid :: pid()}} |{error, timeout | no_consensus}.
+lookup(Name, Retry) ->
   Parent = self(),
   P = spawn_link(fun() ->
     Nodes = pes_cluster:nodes(),
@@ -55,35 +63,48 @@ lookup(Name) ->
     Parent ! {'$reply', self(), wait_for_responses(Majority, Promises, #{})}
   end),
   receive
-    {'$reply', P, {ok, _Term, {Pid, GuardPid, TimeStamp}}} ->
-      case pes_time:is_expired(TimeStamp) of
-        true ->
-          undefined;
-        _ ->
-          {ok, {Pid, GuardPid, TimeStamp}}
-      end;
+    {'$reply', P, {ok, _Term, {Pid, GuardPid}}} ->
+      {ok, {Pid, GuardPid}};
     {'$reply', P, {ok, _Term, undefined}} ->
       undefined;
     {'$reply', P, not_found} ->
-      undefined
-  after 5000 ->
-    timeout
+      undefined;
+    {'$reply', P, {error, no_consensus}} when Retry > 0 ->
+      timer:sleep(5),
+      lookup(Name, Retry-1);
+    {'$reply', P, {error, no_consensus}} ->
+      {error, no_consensus}
+  after ?DEFAULT_TIMEOUT ->
+    exit(P, kill),
+    {error, timeout}
   end.
 
 wait_for_responses(_Majority, [], _Replies) ->
+  io:format(user, "nc: ~p~n", [_Replies]),
   {error, no_consensus};
 wait_for_responses(Majority, Promises, Replies) ->
   receive
     #promise_reply{ref = Ref, result = Result} = Reply ->
       pes_promise:resolved(Reply),
-      ResultCount = maps:get(Result, Replies, 0) + 1,
+      NewResult = case Result of
+                    {ok, _, undefined} -> not_found;
+                    {ok, Term, {Pid, GuardPid, TimeStamp}} ->
+                      case pes_time:is_expired(TimeStamp) of
+                        true ->
+                          not_found;
+                        _ ->
+                          {ok, Term, {Pid, GuardPid}}
+                      end;
+                    Else -> Else
+                  end,
+      ResultCount = maps:get(NewResult, Replies, 0) + 1,
       case ResultCount >= Majority of
         true ->
-          Result;
+          NewResult;
         false ->
           wait_for_responses(Majority,
                              lists:delete({promise, Ref}, Promises),
-                             Replies#{Result => ResultCount})
+                             Replies#{NewResult => ResultCount})
       end;
     {'DOWN', Ref, process, _Pid, _Reason} ->
       wait_for_responses(Majority, lists:delete({promise, Ref}, Promises), Replies)

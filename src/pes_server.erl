@@ -112,8 +112,9 @@ handle_command({commit, Id, {Term, Server}, Value}, #state{data_storage_ref = DS
     [] ->
       {nack, {node(), not_found}}
   end;
-% Commit can reply with nack and the actual term, server data.
-% To ensure in the mean time no other registration attempt were made, we send back those values.
+% Commit can reply with nack and the actual term, and server data.
+% To ensure in the mean time no other registration attempt were made,
+% we need to send back those values.
 handle_command({repair, Id, Term, {NewTermId, _} = NewTerm, Value},
                 #state{data_storage_ref = DSR,
                        term_storage_ref = TSR}) ->

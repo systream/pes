@@ -172,6 +172,7 @@ handle_event(state_timeout, heartbeat, monitoring, #state{replies = Replies,
 handle_event(info, #promise_reply{result = {nack, {Server, OldTerm}}} = Reply, monitoring,
              #state{id = Id, term = Term, pid = Pid} = State) ->
   % we are in monitoring phase se we can do repair because we have the majority
+  %@TODO now() is possible differs...
   repair(Server, Id, OldTerm, Term, {Pid, self(), pes_time:now()}),
   handle_event(info, Reply#promise_reply{result = nack}, monitoring, State);
 handle_event(info, #promise_reply{ref = Ref, result = Response} = Reply, monitoring, State) ->
