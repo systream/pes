@@ -47,7 +47,7 @@ whereis_name(Name) ->
   end.
 
 -spec lookup(term()) ->
-  undefined | {ok, {Pid :: pid(), GuardPid :: pid(), TimeStamp :: pos_integer()}} |
+  undefined | {ok, {Pid :: pid(), GuardPid :: pid()}} |
   {error, timeout | no_consensus}.
 lookup(Name) ->
   lookup(Name, 3).

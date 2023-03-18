@@ -32,7 +32,7 @@
   majority :: pos_integer(),
   caller :: pid(),
   term = 1 :: pos_integer(),
-  last_timestamp = 0 :: pos_integer(),
+  last_timestamp = 1 :: pos_integer(),
   promises = [] :: [{promise, reference()}],
   replies = #{} :: #{}
 }).
@@ -197,12 +197,29 @@ handle_read(Ref, Reply, State) ->
   case evaluate_response(Ref, Reply, State) of
     {keep_state, NewState} ->
       {keep_state, NewState};
-    {{no_consensus, _Replies}, NewState = #state{id = Id, pid = Pid}} ->
-      % @TODO is it possible that for example nodes joined the cluster and they have not found
-      % so we can get no consensus, this this situation will slow down registration process,
-      % but we need the higher term from the replies
-      wait(Id, Pid, 16),
-      {next_state, prepare, increase_term(NewState)};
+    {{no_consensus, Replies}, #state{id = Id, pid = Pid, majority = Majority, term = CTerm} = NewState} ->
+      % Is it possible that for example nodes joined the cluster and they have not found
+      % so we can get no consensus, and this this situation can slow down registration process,
+      % We need to find out the highest term in case of no active registration
+      {HTerm, Count} = maps:fold(fun(not_found, Count, {HighestTerm, Acc}) ->
+                                        {HighestTerm, Acc + Count};
+                                    ({ok, Term, undefined}, Count, {HighestTerm, Acc}) ->
+                                       {max(HighestTerm, Term), Acc + Count};
+                                    ({ok, Term, {_, _, Ts}}, Count, {HighestTerm, Acc}) ->
+                                       case pes_time:is_expired(Ts) of
+                                         true ->
+                                           {max(HighestTerm, Term), Acc + Count};
+                                         _ ->
+                                           {HighestTerm, Acc}
+                                       end
+                                  end, {CTerm, 0}, Replies),
+      case Count >= Majority of
+        true ->
+          {next_state, prepare, increase_term(NewState#state{term = HTerm})};
+        _ ->
+          wait(Id, Pid, 16),
+          {next_state, prepare, increase_term(NewState)}
+      end;
     {{ok, GetTerm, {Pid, _GuardPid, Timestamp}}, NewState} ->
       case pes_time:is_expired(Timestamp) of
         true -> % expired
