@@ -4,13 +4,29 @@
 
 %% API
 -export([test/4, test/3, on_all_nodes/4, alive_process_counter/0,
-  init/1, handle_call/3, handle_cast/2, handle_info/2, sleep/1]).
+  init/1, handle_call/3, handle_cast/2, handle_info/2, sleep/1, load/5]).
 
 on_all_nodes(Concurrency, KeySpace, ProcessMaxAliveTime, Count) ->
   Nodes = ['1@Peters-MacBook-Pro', '2@Peters-MacBook-Pro', '3@Peters-MacBook-Pro'],
   [pes_cluster:join(N) || N <- Nodes],
   %rpc:multicall(net_kernel, set_net_ticktime, [5, 20]),
   rpc:multicall(?MODULE, test, [Concurrency, KeySpace, ProcessMaxAliveTime, Count]).
+
+load(Concurrency, KeySpace, ProcessMaxAliveTime, Time, Rate) ->
+  EndTime = erlang:system_time(millisecond)+Time,
+  P = [spawn_monitor(fun() -> load(KeySpace, ProcessMaxAliveTime, EndTime, Rate) end)
+    || _ <- lists:seq(1, Concurrency)],
+  wait_for_ready(P).
+
+load(KeySpace, ProcessMaxAliveTime, EndTime, Rate) ->
+  case EndTime < erlang:system_time(millisecond) of
+    true ->
+      ok;
+    _ ->
+      gen_server:start({via, pes, 100000 + rand:uniform(KeySpace)}, ?MODULE, ProcessMaxAliveTime, []),
+      timer:sleep(Rate),
+      load(KeySpace, ProcessMaxAliveTime, EndTime, Rate)
+  end.
 
 test(Concurrency, KeySpace, ProcessMaxAliveTime, Count) ->
   P = [spawn_monitor(fun() -> test(KeySpace, ProcessMaxAliveTime, Count) end)

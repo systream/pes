@@ -10,10 +10,11 @@
 -include_lib("pes_promise.hrl").
 
 -define(DEFAULT_TIMEOUT, 5000).
+-define(DEFAULT_RETRY_COUNT, 3).
 
 %% API
 -export([register_name/2, unregister_name/1, whereis_name/1, send/2,
-         join/1, leave/1]).
+  join/1, leave/1]).
 
 -spec register_name(Name, Pid) -> 'yes' | 'no' when
   Name :: term(),
@@ -50,11 +51,16 @@ whereis_name(Name) ->
   undefined | {ok, {Pid :: pid(), GuardPid :: pid()}} |
   {error, timeout | no_consensus}.
 lookup(Name) ->
-  lookup(Name, 3).
+  lookup(Name, ?DEFAULT_RETRY_COUNT).
 
 -spec lookup(term(), non_neg_integer()) ->
   undefined | {ok, {Pid :: pid(), GuardPid :: pid()}} |{error, timeout | no_consensus}.
 lookup(Name, Retry) ->
+  lookup(Name, Retry, ?DEFAULT_TIMEOUT).
+
+-spec lookup(term(), non_neg_integer(), pos_integer() | infinity) ->
+  undefined | {ok, {Pid :: pid(), GuardPid :: pid()}} |{error, timeout | no_consensus}.
+lookup(Name, Retry, Timeout) ->
   Parent = self(),
   P = spawn_link(fun() ->
     Nodes = pes_cluster:nodes(),
@@ -74,7 +80,7 @@ lookup(Name, Retry) ->
       lookup(Name, Retry-1);
     {'$reply', P, {error, no_consensus}} ->
       {error, no_consensus}
-  after ?DEFAULT_TIMEOUT ->
+  after Timeout ->
     exit(P, kill),
     {error, timeout}
   end.

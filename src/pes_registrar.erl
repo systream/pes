@@ -211,7 +211,8 @@ handle_read(Ref, Reply, State) ->
                                            {max(HighestTerm, Term), Acc + Count};
                                          _ ->
                                            {HighestTerm, Acc}
-                                       end
+                                       end;
+                                    (_, _, FAcc) -> FAcc
                                   end, {CTerm, 0}, Replies),
       case Count >= Majority of
         true ->
