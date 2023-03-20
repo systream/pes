@@ -7,13 +7,17 @@
 %%%-------------------------------------------------------------------
 -module(pes_cluster).
 
+-behaviour(gen_server).
 -compile({no_auto_import, [nodes/0]}).
 
 -define(NODES_KEY, {?MODULE, nodes}).
+-define(SERVER, ?MODULE).
+
+-record(state, {}).
 
 %% API
 -export([nodes/0, join/1, leave/1]).
--export([start_link/0, init/0, loop/0]).
+-export([start_link/0, init/1, handle_call/3, handle_cast/2, handle_info/2]).
 
 -spec join(node()) -> ok.
 join(Node) ->
@@ -27,32 +31,6 @@ leave(Node) ->
 %%% API
 %%%===================================================================
 
-%% @doc Spawns the server and registers the local name (unique)
--spec(start_link() ->
-  {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
-start_link() ->
-  {ok, spawn_link(?MODULE, init, [])}.
-
--spec init() -> no_return().
-init() ->
-  simple_gossip:subscribe(self(), rumor),
-  persistent_term:put(?NODES_KEY, cluster_nodes()),
-  erlang:register(pes_cluster, self()),
-  ?MODULE:loop().
-
--spec loop() -> no_return().
-loop() ->
-  receive
-    {rumor_changed, Rumor} ->
-      Nodes = lists:usort(simple_gossip_rumor:nodes(Rumor)),
-      CurrentNodes = lists:usort(nodes()),
-      case CurrentNodes =:= Nodes of
-        true -> ok;
-        _ -> persistent_term:put(?NODES_KEY, Nodes)
-      end,
-      loop()
-  end.
-
 -spec nodes() -> [node()].
 nodes() ->
   persistent_term:get(?NODES_KEY, [node()]).
@@ -64,3 +42,37 @@ cluster_nodes() ->
     {error, _, _Leader, Nodes} ->
       Nodes
   end.
+
+%% @doc Spawns the server and registers the local name (unique)
+-spec(start_link() ->
+  {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
+start_link() ->
+  gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+
+-spec init(Args :: term()) -> {ok, State :: term()}.
+init(_) ->
+  simple_gossip:subscribe(self(), rumor),
+  persistent_term:put(?NODES_KEY, cluster_nodes()),
+  {ok, #state{}}.
+
+-spec handle_call(Request :: term(), From :: {pid(), Tag :: term()}, State :: term()) ->
+  no_return().
+handle_call(_Request, _From, _State) ->
+  erlang:error(not_implemented).
+
+-spec handle_cast(Request :: term(), State :: term()) -> no_return().
+handle_cast(_Request, _State) ->
+  erlang:error(not_implemented).
+
+-spec handle_info(Info :: timeout | term(), State :: term()) ->
+  {noreply, NewState :: term()} |
+  {noreply, NewState :: term(), timeout() | hibernate | {continue, term()}} |
+  {stop, Reason :: term(), NewState :: term()}.
+handle_info({rumor_changed, Rumor}, State) ->
+  Nodes = lists:usort(simple_gossip_rumor:nodes(Rumor)),
+  CurrentNodes = lists:usort(nodes()),
+  case CurrentNodes =:= Nodes of
+    true -> ok;
+    _ -> persistent_term:put(?NODES_KEY, Nodes)
+  end,
+  {noreply, State}.

@@ -29,11 +29,12 @@ prop_test() ->
   Nodes = [NodeA, NodeB, NodeC],
   io:format(user, " done", []),
 
-  TickTime = 3,
+  TickTime = 5,
   io:format(user, "~nNet tick time se to ~p", [TickTime]),
-  rpc:multicall([node() | Nodes], net_kernel, set_net_ticktime, [TickTime, 10]),
+  rpc:multicall([node() | Nodes], net_kernel, set_net_ticktime, [TickTime, 15]),
 
-  [pes:join(Node) || Node <- Nodes],
+  [OnNode | TailNodes] = Nodes,
+  [rpc:call(OnNode, pes, join, [Node]) || Node <- TailNodes],
 
   %io:format(user, "~n", []),
   %{group_leader, GLPid} = erlang:process_info(self(), group_leader),

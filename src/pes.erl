@@ -54,34 +54,34 @@ lookup(Name) ->
   lookup(Name, ?DEFAULT_RETRY_COUNT).
 
 -spec lookup(term(), non_neg_integer()) ->
-  undefined | {ok, {Pid :: pid(), GuardPid :: pid()}} |{error, timeout | no_consensus}.
+  undefined | {ok, {Pid :: pid(), GuardPid :: pid()}} | {error, timeout | no_consensus}.
 lookup(Name, Retry) ->
   lookup(Name, Retry, ?DEFAULT_TIMEOUT).
 
 -spec lookup(term(), non_neg_integer(), pos_integer() | infinity) ->
-  undefined | {ok, {Pid :: pid(), GuardPid :: pid()}} |{error, timeout | no_consensus}.
+  undefined | {ok, {Pid :: pid(), GuardPid :: pid()}} | {error, timeout | no_consensus}.
 lookup(Name, Retry, Timeout) ->
   Parent = self(),
-  P = spawn_link(fun() ->
+  Gatherer = spawn_link(fun() ->
     Nodes = pes_cluster:nodes(),
     Majority = (length(Nodes) div 2) + 1,
     Promises = [pes_proxy:read(Node, Name) || Node <- Nodes],
     Parent ! {'$reply', self(), wait_for_responses(Majority, Promises, #{})}
   end),
   receive
-    {'$reply', P, {ok, _Term, {Pid, GuardPid}}} ->
+    {'$reply', Gatherer, {ok, _Term, {Pid, GuardPid}}} ->
       {ok, {Pid, GuardPid}};
-    {'$reply', P, {ok, _Term, undefined}} ->
+    {'$reply', Gatherer, {ok, _Term, undefined}} ->
       undefined;
-    {'$reply', P, not_found} ->
+    {'$reply', Gatherer, not_found} ->
       undefined;
-    {'$reply', P, {error, no_consensus}} when Retry > 0 ->
+    {'$reply', Gatherer, {error, no_consensus}} when Retry > 0 ->
       timer:sleep(5),
-      lookup(Name, Retry-1);
-    {'$reply', P, {error, no_consensus}} ->
+      lookup(Name, Retry - 1);
+    {'$reply', Gatherer, {error, no_consensus}} ->
       {error, no_consensus}
   after Timeout ->
-    exit(P, kill),
+    exit(Gatherer, kill),
     {error, timeout}
   end.
 

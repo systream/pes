@@ -72,8 +72,8 @@ start_link(Server) ->
 init({Server, Parent}) ->
   true = erlang:register(Server, self()),
   proc_lib:init_ack(Parent, {ok, self()}),
-  loop(#state{term_storage_ref = ets:new(?TERM_STORAGE, [protected]),
-              data_storage_ref = ets:new(?DATA_STORAGE, [protected])}).
+  loop(#state{term_storage_ref = ets:new(?TERM_STORAGE, [protected, compressed]),
+              data_storage_ref = ets:new(?DATA_STORAGE, [protected, compressed])}).
 
 -spec loop(state()) -> no_return().
 loop(State) ->

@@ -4,7 +4,7 @@
 -export([start_node/1, start_node/2, stop_node/1]).
 
 start_node(Name) ->
-  start_node(Name, [{monitor_master, true}, {kill_if_fail, true}]).
+  start_node(Name, [{monitor_master, true}]).
 
 start_node(Name, Opts) ->
   case ct_slave:start(Name, Opts) of

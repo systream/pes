@@ -24,7 +24,6 @@
 %% gen_statem callbacks
 -export([init/1, handle_event/4, callback_mode/0]).
 
-
 -record(state, {
   id :: term(),
   pid :: pid(),
@@ -197,7 +196,9 @@ handle_read(Ref, Reply, State) ->
   case evaluate_response(Ref, Reply, State) of
     {keep_state, NewState} ->
       {keep_state, NewState};
-    {{no_consensus, Replies}, #state{id = Id, pid = Pid, majority = Majority, term = CTerm} = NewState} ->
+    {{no_consensus, Replies}, #state{id = Id, pid = Pid,
+                                     majority = Majority,
+                                     term = CTerm} = NewState} ->
       % Is it possible that for example nodes joined the cluster and they have not found
       % so we can get no consensus, and this this situation can slow down registration process,
       % We need to find out the highest term in case of no active registration
