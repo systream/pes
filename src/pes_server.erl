@@ -8,6 +8,7 @@
 -module(pes_server).
 
 -include_lib("pes_promise.hrl").
+-include_lib("stdlib/include/ms_transform.hrl").
 
 -type id() :: term().
 -type consensus_term() :: pos_integer().
@@ -24,6 +25,10 @@
 
 -export([start_link/1, init/1, loop/1]).
 -export([system_continue/3, system_terminate/4, system_get_state/1, system_code_change/4]).
+
+-define(DEFAULT_CLEANUP_TIMEOUT, 5001).
+-define(DEFAULT_DELETE_LIMIT, 250).
+-define(DEFAULT_DELETE_THRESHOLD, 200000).
 
 -define(TERM_STORAGE, pes_term_storage).
 -define(DATA_STORAGE, pes_data_storage).
@@ -72,6 +77,7 @@ start_link(Server) ->
 init({Server, Parent}) ->
   true = erlang:register(Server, self()),
   proc_lib:init_ack(Parent, {ok, self()}),
+  schedule_cleanup(),
   loop(#state{term_storage_ref = ets:new(?TERM_STORAGE, [protected, compressed]),
               data_storage_ref = ets:new(?DATA_STORAGE, [protected, compressed])}).
 
@@ -81,6 +87,10 @@ loop(State) ->
     #pes_promise_call{from = From, command = Command} ->
       pes_promise:reply(From, handle_command(Command, State)),
       ?MODULE:loop(State);
+    cleanup ->
+      clean_expired_data(State),
+      schedule_cleanup(),
+      ?MODULE:loop(State);
     {system, From, Request} ->
       sys:handle_system_msg(Request, From, self(), ?MODULE, [], undefined)
   end.
@@ -88,7 +98,7 @@ loop(State) ->
 -spec handle_command(term(), state()) -> term().
 handle_command({read, Id}, #state{data_storage_ref = DSR}) ->
   case ets:lookup(DSR, Id) of
-    [{Id, {Term, Value}}] ->
+    [{Id, {Term, Value}, _Ts}] ->
       {ok, Term, Value};
     _ ->
       not_found
@@ -105,7 +115,8 @@ handle_command({commit, Id, {Term, Server}, Value}, #state{data_storage_ref = DS
                                                            term_storage_ref = TSR}) ->
   case ets:lookup(TSR, Id) of
     [{Id, {StoredTerm, StoredServer}}] when StoredTerm =:= Term andalso StoredServer =:= Server ->
-      true = ets:insert(DSR, {Id, {Term, Value}}),
+      Now = pes_time:now(),
+      true = ets:insert(DSR, {Id, {Term, Value}, Now}),
       ack;
     [{Id, {StoredTerm, StoredServer}}] ->
       {nack, {node(), {StoredTerm, StoredServer}}};
@@ -121,11 +132,11 @@ handle_command({repair, Id, Term, {NewTermId, _} = NewTerm, Value},
   case ets:lookup(TSR, Id) of
     [{Id, StoredTerm}] when StoredTerm =:= Term -> % the term matches
       true = ets:insert(TSR, {Id, NewTerm}),
-      true = ets:insert(DSR, {Id, {NewTermId, Value}}),
+      true = ets:insert(DSR, {Id, {NewTermId, Value}, pes_time:now()}),
       ack;
     [] when Term =:= not_found ->
       true = ets:insert(TSR, {Id, NewTerm}),
-      true = ets:insert(DSR, {Id, {NewTermId, Value}}),
+      true = ets:insert(DSR, {Id, {NewTermId, Value}, pes_time:now()}),
       ack;
     _E ->
       nack
@@ -144,3 +155,25 @@ system_get_state(Chs) ->
     Extra :: term()) -> {ok, NewState :: state()}.
 system_code_change(State, ?MODULE, _OldVsn, _Extra) ->
   {ok, State}.
+
+-spec clean_expired_data(state()) -> ok.
+clean_expired_data(#state{data_storage_ref = DSR, term_storage_ref = TSR}) ->
+  DeleteThreshold = application:get_env(pes, delete_time_threshold, ?DEFAULT_DELETE_THRESHOLD),
+  Threshold = pes_time:now() - DeleteThreshold,
+  DeleteLimit = application:get_env(pes, delete_limit, ?DEFAULT_DELETE_LIMIT),
+  case ets:select(DSR, ets:fun2ms(fun({Id, _, Ts}) when Ts < Threshold -> Id end), DeleteLimit) of
+    '$end_of_table' ->
+      ok;
+    {Ids, _Continuation} ->
+      lists:foreach(fun(Id) ->
+                      ets:delete(DSR, Id),
+                      ets:delete(TSR, Id)
+                    end, Ids)
+  end.
+
+-spec schedule_cleanup() -> ok.
+schedule_cleanup() ->
+  RescheduleTime = application:get_env(pes, cleanup_period_time, ?DEFAULT_CLEANUP_TIMEOUT),
+  erlang:send_after(RescheduleTime + rand:uniform(100), self(), cleanup),
+  ok.
+
