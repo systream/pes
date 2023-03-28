@@ -15,8 +15,9 @@
 -define(DEFAULT_TIMEOUT, 5000).
 
 %-define(trace(Msg, Args), io:format(user, Msg ++ "~n", Args)).
--define(TRACE(Msg, Args, Id), logger:warning(Msg, Args, #{node => node(), cid => Id,
-                                                          state_name => erlang:get(state_name)})).
+%-define(TRACE(Msg, Args, Id), logger:warning(Msg, Args, #{node => node(), cid => Id,
+%                                                          state_name => erlang:get(state_name)})).
+-define(TRACE(Msg, Args, Id), ok).
 
 %% API
 -export([register/2, unregister/1]).
@@ -111,7 +112,6 @@ handle_event({call, From}, stop, StateName, #state{id = Id, term = Term, nodes =
 % read
 handle_event(enter, _, reg_check, #state{id = Id, nodes = Nodes} = State) ->
   %?trace("Entered reg check", [], Id),
-  put(state_name, reg_check),
   {keep_state, set_promises([pes_proxy:read(Node, Id) || Node <- Nodes], State)};
 handle_event(info, #promise_reply{ref = Ref, result = Response} = Reply, reg_check, State) ->
   pes_promise:resolved(Reply),
@@ -122,7 +122,6 @@ handle_event(info, {'DOWN', Ref, process, _Pid, Reason}, reg_check, State) ->
 % prepare
 handle_event(enter, _, prepare, #state{id = Id, nodes = Nodes, term = Term} = State) ->
   %?trace("Entered prepare", [], Id),
-  put(state_name, prepare),
   {keep_state, set_promises([prepare(Node, Id, Term) || Node <- Nodes], State)};
 handle_event(info, #promise_reply{ref = Ref, result = Response} = Reply, prepare, State) ->
   pes_promise:resolved(Reply),
@@ -133,7 +132,6 @@ handle_event(info, {'DOWN', Ref, process, _Pid, Reason}, prepare, State) ->
 % commit
 handle_event(enter, _, commit, #state{id = Id, nodes = Nodes, term = Term, pid = Pid} = State) ->
   %?trace("Entered commit", [], Id),
-  put(state_name, commit),
   Data = {Pid, self(), pes_time:now()},
   {keep_state, set_promises([commit(Node, Id, Term, Data) || Node <- Nodes], State)};
 handle_event(info, #promise_reply{ref = Ref, result = Response} = Reply, commit, State) ->
@@ -144,7 +142,6 @@ handle_event(info, {'DOWN', Ref, process, _Pid, Reason}, commit, State) ->
 
 % registered
 handle_event(enter, _, registered, State) ->
-  put(state_name, registered),
   %?trace("Entered registered", [], State#state.id),
   reply(State, registered),
   {keep_state, State#state{replies = #{}}, {state_timeout, 0, monitoring}};
@@ -154,7 +151,6 @@ handle_event(state_timeout, monitoring, registered, #state{} = State) ->
 % heartbeat
 handle_event(enter, _, monitoring, #state{id = Id, term = Term, pid = Pid} = State) ->
   %?trace("Entered monitoring", [], State#state.id),
-  put(state_name, monitoring),
   Now = pes_time:now(),
   Data = {Pid, self(), Now},
   HeartBeat = application:get_env(pes, heartbeat, ?DEFAULT_HEARTBEAT) + rand:uniform(10),
@@ -167,8 +163,8 @@ handle_event(state_timeout, heartbeat, monitoring, #state{replies = Replies,
     ack ->
       {repeat_state, State};
     Answer ->
-      ?TRACE("cannot_renew timeout ~p", [Answer], State#state.id),
-      {stop, cannot_renew_pid_timeout, State}
+      %?TRACE("cannot_renew timeout ~p", [Answer], State#state.id),
+      {stop, {cannot_renew_pid_timeout, Answer}, State}
   end;
 handle_event(info, #promise_reply{result = {nack, {Server, OldTerm}}} = Reply, monitoring,
              #state{id = Id, term = Term, pid = Pid, last_timestamp = Now} = State) ->
@@ -275,13 +271,13 @@ handle_update_responses(Ref, Reply, State) ->
       {keep_state, NewState};
     {nack, NewState} ->
       % we cannot update the record, the process should die
-      ?TRACE("cannot_renew ~p -> ~p -> ~p",
-            [NewState#state.pid, Reply, NewState], NewState#state.id),
+      %?TRACE("cannot_renew ~p -> ~p -> ~p",
+      %      [NewState#state.pid, Reply, NewState], NewState#state.id),
       exit(NewState#state.pid, kill),
       {stop, {cannot_renew_pid, no_consensus, State#state.id}, NewState};
     {{no_consensus, _}, NewState} ->
-      ?TRACE("cannot_renew no consensus ~p -> ~p -> ~p",
-            [NewState#state.pid, Reply, NewState], NewState#state.id),
+      %?TRACE("cannot_renew no consensus ~p -> ~p -> ~p",
+      %      [NewState#state.pid, Reply, NewState], NewState#state.id),
       exit(NewState#state.pid, kill),
       {stop, {cannot_renew_pid, no_consensus, State#state.id}, NewState};
     {{error, Reason}, NewState} ->
@@ -366,6 +362,8 @@ evaluate_replies(Replies, Majority) ->
 majority(Nodes) ->
   (length(Nodes) div 2) + 1.
 
+set_nodes(#state{nodes = Nodes} = State, Nodes) ->
+  State;
 set_nodes(State, Nodes) ->
   State#state{nodes = Nodes, majority = majority(Nodes)}.
 

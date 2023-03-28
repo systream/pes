@@ -3,13 +3,11 @@
 -behaviour(gen_server).
 
 %% API
--export([test/4, test/3, on_all_nodes/4, alive_process_counter/0,
+-export([test/4, test/3, on_all_nodes/5, alive_process_counter/0,
   init/1, handle_call/3, handle_cast/2, handle_info/2, sleep/1, load/5]).
 
-on_all_nodes(Concurrency, KeySpace, ProcessMaxAliveTime, Count) ->
-  Nodes = ['1@Peters-MacBook-Pro', '2@Peters-MacBook-Pro', '3@Peters-MacBook-Pro'],
+on_all_nodes(Nodes, Concurrency, KeySpace, ProcessMaxAliveTime, Count) ->
   [pes_cluster:join(N) || N <- Nodes],
-  %rpc:multicall(net_kernel, set_net_ticktime, [5, 20]),
   rpc:multicall(?MODULE, test, [Concurrency, KeySpace, ProcessMaxAliveTime, Count]).
 
 load(Concurrency, KeySpace, ProcessMaxAliveTime, Time, Rate) ->
@@ -24,7 +22,7 @@ load(KeySpace, ProcessMaxAliveTime, EndTime, Rate) ->
       ok;
     _ ->
       gen_server:start({via, pes, 100000 + rand:uniform(KeySpace)}, ?MODULE, ProcessMaxAliveTime, []),
-      timer:sleep(Rate),
+      timer:sleep(rand:uniform(Rate)),
       load(KeySpace, ProcessMaxAliveTime, EndTime, Rate)
   end.
 
@@ -34,15 +32,6 @@ test(Concurrency, KeySpace, ProcessMaxAliveTime, Count) ->
   wait_for_ready(P).
 
 test(KeySpace, ProcessMaxAliveTime, Count) ->
-  %Process = fun() -> spawn(fun() ->
-  %                          case erlang:whereis(alive_process_counter) of
-  %                            undefined ->
-  %                              ok;
-  %                            Pid ->
-  %                              Pid ! self()
-  %                          end,
-  %                          sleep(ProcessMaxAliveTime)
-  %                         end) end,
   {Time, R} =
     timer:tc(fun() ->
       %[pes:register_name(100000 + rand:uniform(KeySpace), Process()) || _I <- lists:seq(1, Count)]

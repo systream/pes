@@ -129,18 +129,19 @@ handle_command({commit, Id, {Term, Server}, Value}, #state{data_storage_ref = DS
 handle_command({repair, Id, Term, {NewTermId, _} = NewTerm, Value},
                 #state{data_storage_ref = DSR,
                        term_storage_ref = TSR}) ->
-  case ets:lookup(TSR, Id) of
-    [{Id, StoredTerm}] when StoredTerm =:= Term -> % the term matches
+  Result = case ets:lookup(TSR, Id) of
+             [{Id, StoredTerm}] when StoredTerm =:= Term -> ack; % the term matches
+             [] when Term =:= not_found -> ack;
+             _E -> nack
+           end,
+  case Result of
+    ack ->
       true = ets:insert(TSR, {Id, NewTerm}),
-      true = ets:insert(DSR, {Id, {NewTermId, Value}, pes_time:now()}),
-      ack;
-    [] when Term =:= not_found ->
-      true = ets:insert(TSR, {Id, NewTerm}),
-      true = ets:insert(DSR, {Id, {NewTermId, Value}, pes_time:now()}),
-      ack;
-    _E ->
-      nack
-  end.
+      true = ets:insert(DSR, {Id, {NewTermId, Value}, pes_time:now()});
+    nack ->
+      ok
+  end,
+  Result.
 
 system_continue(_Parent, _Deb, State) ->
   ?MODULE:loop(State).
@@ -161,14 +162,21 @@ clean_expired_data(#state{data_storage_ref = DSR, term_storage_ref = TSR}) ->
   DeleteThreshold = application:get_env(pes, delete_time_threshold, ?DEFAULT_DELETE_THRESHOLD),
   Threshold = pes_time:now() - DeleteThreshold,
   DeleteLimit = application:get_env(pes, delete_limit, ?DEFAULT_DELETE_LIMIT),
-  case ets:select(DSR, ets:fun2ms(fun({Id, _, Ts}) when Ts < Threshold -> Id end), DeleteLimit) of
+  Select = ets:fun2ms(fun({Id, {TermId, _Value}, Ts}) when Ts < Threshold -> {Id, TermId} end),
+  case ets:select(DSR, Select, DeleteLimit) of
     '$end_of_table' ->
       ok;
-    {Ids, _Continuation} ->
-      lists:foreach(fun(Id) ->
+    {List, _Continuation} ->
+      lists:foreach(fun({Id, TermId}) ->
+                      % data can be deleted, because it has expired
                       ets:delete(DSR, Id),
-                      ets:delete(TSR, Id)
-                    end, Ids)
+                      % Term data can not be deleted when
+                      % We are in the middle of a process registration
+                      case ets:lookup(TSR, Id) of
+                        [{Id, {TermId, _}}] -> ets:delete(TSR, Id);
+                        _ -> ok
+                      end
+                    end, List)
   end.
 
 -spec schedule_cleanup() -> ok.
@@ -176,4 +184,3 @@ schedule_cleanup() ->
   RescheduleTime = application:get_env(pes, cleanup_period_time, ?DEFAULT_CLEANUP_TIMEOUT),
   erlang:send_after(RescheduleTime + rand:uniform(100), self(), cleanup),
   ok.
-

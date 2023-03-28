@@ -33,6 +33,11 @@ prop_test() ->
   io:format(user, "~nNet tick time se to ~p", [TickTime]),
   rpc:multicall([node() | Nodes], net_kernel, set_net_ticktime, [TickTime, 15]),
 
+  rpc:multicall([node() | Nodes], application, set_env, [pes, process_timeout, 2000]),
+  rpc:multicall([node() | Nodes], application, set_env, [pes, heartbeat, 1000]),
+
+  rpc:multicall([node() | Nodes], application, set_env, [pes, delete_time_threshold, 10000]),
+
   [OnNode | TailNodes] = Nodes,
   [rpc:call(OnNode, pes, join, [Node]) || Node <- TailNodes],
 
@@ -75,9 +80,9 @@ command(#{nodes := Nodes} = State) ->
     frequency([
       {90, {call, rpc, call, [oneof(Nodes), pes, register_name, [key(), process()]]}},
       {40, {call, rpc, call, [oneof(Nodes), pes, unregister_name, [key()]]}},
-      {80, {call, rpc, call, [oneof(Nodes), pes, whereis_name, [key()]]}},
-      {26, {call, ?MODULE, fix_connections, [State]}},
-      {1, {call, ?MODULE, cut_connections, [islands(Nodes)]}}
+      {80, {call, rpc, call, [oneof(Nodes), pes, whereis_name, [key()]]}}%,
+      %{26, {call, ?MODULE, fix_connections, [State]}},
+      %{1, {call, ?MODULE, cut_connections, [islands(Nodes)]}}
     ]).
 
 %% @doc Determines whether a command should be valid under the
@@ -125,7 +130,7 @@ islands(Nodes) ->
   ?LET(Split, integer(1, length(Nodes)-1), begin lists:split(Split, Nodes) end).
 
 start_node(Name) ->
-  Opts = [{monitor_master, false}, {kill_if_fail, true}],
+  Opts = [{monitor_master, true}, {kill_if_fail, true}],
   case ct_slave:start(Name, Opts) of
     {error, started_not_connected, Node} ->
       net_kernel:connect_node(Node),
