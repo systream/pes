@@ -164,13 +164,19 @@ handle_event(state_timeout, heartbeat, monitoring, #state{replies = Replies,
       {repeat_state, State};
     Answer ->
       %?TRACE("cannot_renew timeout ~p", [Answer], State#state.id),
-      {stop, {cannot_renew_pid_timeout, Answer}, State}
+      {stop, {cannot_renew_registration, {timeout, Answer}}, State}
   end;
 handle_event(info, #promise_reply{result = {nack, {Server, OldTerm}}} = Reply, monitoring,
              #state{id = Id, term = Term, pid = Pid, last_timestamp = Now} = State) ->
   % we are in monitoring phase so we can do repair because we surely have the majority
-  repair(Server, Id, OldTerm, Term, {Pid, self(), Now}),
-  handle_event(info, Reply#promise_reply{result = nack}, monitoring, State);
+
+  % if the repair was success than we convert the nack to an ack,
+  % to handle the situation when too many knew nodes added
+  NewResult = case repair(Server, Id, OldTerm, Term, {Pid, self(), Now}) of
+                ack -> ack;
+                _ -> nack
+              end,
+  handle_event(info, Reply#promise_reply{result = NewResult}, monitoring, State);
 handle_event(info, #promise_reply{ref = Ref, result = Response} = Reply, monitoring, State) ->
   pes_promise:resolved(Reply),
   handle_update_responses(Ref, Response, State);
@@ -274,16 +280,16 @@ handle_update_responses(Ref, Reply, State) ->
       %?TRACE("cannot_renew ~p -> ~p -> ~p",
       %      [NewState#state.pid, Reply, NewState], NewState#state.id),
       exit(NewState#state.pid, kill),
-      {stop, {cannot_renew_pid, no_consensus, State#state.id}, NewState};
+      {stop, {cannot_renew_registration, no_consensus, State#state.id}, NewState};
     {{no_consensus, _}, NewState} ->
       %?TRACE("cannot_renew no consensus ~p -> ~p -> ~p",
       %      [NewState#state.pid, Reply, NewState], NewState#state.id),
       exit(NewState#state.pid, kill),
-      {stop, {cannot_renew_pid, no_consensus, State#state.id}, NewState};
+      {stop, {cannot_renew_registration, no_consensus, State#state.id}, NewState};
     {{error, Reason}, NewState} ->
       % we cannot update the record, the process should die
       exit(NewState#state.pid, kill),
-      {stop, {cannot_renew_pid, Reason, State#state.id}, NewState}
+      {stop, {cannot_renew_registration, Reason, State#state.id}, NewState}
   end.
 
 evaluate_response(Ref, {nack, _}, State) ->
@@ -338,7 +344,7 @@ commit(Node, Id, Term, Value) ->
   pes_proxy:commit(Node, Id, encapsulate_term(Term), Value).
 
 repair(Node, Id, OldTerm, NewTerm, Value) ->
-  pes_proxy:repair(Node, Id, OldTerm, encapsulate_term(NewTerm), Value).
+  pes_promise:await(pes_proxy:repair(Node, Id, OldTerm, encapsulate_term(NewTerm), Value)).
 
 encapsulate_term(Term) ->
   {Term, self()}.

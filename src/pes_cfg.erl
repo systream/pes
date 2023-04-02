@@ -86,6 +86,8 @@ handle_cast(_Request, _State) ->
   {noreply, NewState :: term()} |
   {noreply, NewState :: term(), timeout() | hibernate | {continue, term()}} |
   {stop, Reason :: term(), NewState :: term()}.
+handle_info({data_changed, undefined}, State) ->
+  {noreply, State};
 handle_info({data_changed, Data}, State) ->
   persist(Data),
   {noreply, State}.

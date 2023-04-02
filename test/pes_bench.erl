@@ -4,7 +4,18 @@
 
 %% API
 -export([test/4, test/3, on_all_nodes/5, alive_process_counter/0,
-  init/1, handle_call/3, handle_cast/2, handle_info/2, sleep/1, load/5]).
+  init/1, handle_call/3, handle_cast/2, handle_info/2, sleep/1, load/5, rep/6]).
+
+
+rep(Concurrency, KeySpace, ProcessMaxAliveTime, TimeR, Rate, Time) ->
+  spawn(fun() ->
+    F = fun R () ->
+          rpc:multicall([node() | nodes()], pes_bench, load, [Concurrency, KeySpace, ProcessMaxAliveTime, TimeR, Rate]),
+          R()
+        end,
+    timer:apply_after(Time, erlang, exit, [self(), kill]),
+    F()
+  end).
 
 on_all_nodes(Nodes, Concurrency, KeySpace, ProcessMaxAliveTime, Count) ->
   [pes_cluster:join(N) || N <- Nodes],
