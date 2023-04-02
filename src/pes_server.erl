@@ -159,9 +159,9 @@ system_code_change(State, ?MODULE, _OldVsn, _Extra) ->
 
 -spec clean_expired_data(state()) -> ok.
 clean_expired_data(#state{data_storage_ref = DSR, term_storage_ref = TSR}) ->
-  DeleteThreshold = application:get_env(pes, delete_time_threshold, ?DEFAULT_DELETE_THRESHOLD),
+  DeleteThreshold = pes_cfg:get(delete_time_threshold, ?DEFAULT_DELETE_THRESHOLD),
   Threshold = pes_time:now() - DeleteThreshold,
-  DeleteLimit = application:get_env(pes, delete_limit, ?DEFAULT_DELETE_LIMIT),
+  DeleteLimit = pes_cfg:get(delete_limit, ?DEFAULT_DELETE_LIMIT),
   Select = ets:fun2ms(fun({Id, {TermId, _Value}, Ts}) when Ts < Threshold -> {Id, TermId} end),
   case ets:select(DSR, Select, DeleteLimit) of
     '$end_of_table' ->
@@ -181,6 +181,6 @@ clean_expired_data(#state{data_storage_ref = DSR, term_storage_ref = TSR}) ->
 
 -spec schedule_cleanup() -> ok.
 schedule_cleanup() ->
-  RescheduleTime = application:get_env(pes, cleanup_period_time, ?DEFAULT_CLEANUP_TIMEOUT),
+  RescheduleTime = pes_cfg:get(cleanup_period_time, ?DEFAULT_CLEANUP_TIMEOUT),
   erlang:send_after(RescheduleTime + rand:uniform(100), self(), cleanup),
   ok.

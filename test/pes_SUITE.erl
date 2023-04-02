@@ -62,6 +62,8 @@ all() ->
     send_ok,
     unregister_undefined,
     repair,
+    cfg_set,
+    clean,
     {group, cluster_group}
   ].
 
@@ -190,6 +192,7 @@ send_ok(_Config) ->
 
 unregister_undefined(_Config) ->
   ?assertEqual(ok, pes:unregister_name(not_registered)).
+
 repair(_Config) ->
   Id = repair_test,
   Tp = ?TEST_PROCESS(1000),
@@ -198,6 +201,49 @@ repair(_Config) ->
   pes_call(repair, [Server, Id, OldTerm, {3, self()}, {Tp, self(), pes_time:now()}]),
   ?assertEqual(ack, pes_call(commit, [node(), Id, 3, test2])),
   ok.
+
+cfg_set(_Config) ->
+  pes_cfg:set(cleanup_period_time, 1000),
+  timer:sleep(15), % gossiping is async so we need to wait a bit to the propagated data
+  ?assertEqual(1000, pes_cfg:get(cleanup_period_time, 2000)),
+
+  % default with auto set
+  ?assertEqual(foo_bar, pes_cfg:get(test_data, foo_bar)),
+  % fetch from cache
+  ?assertEqual(foo_bar, pes_cfg:get(test_data, foo_bar2)),
+  timer:sleep(15), % gossiping is async so we need to wait a bit to the propagated data
+  ?assertEqual(foo_bar, pes_cfg:get(test_data, foo_bar2)),
+
+  pes_cfg:set(test_data, foo_bar22),
+  timer:sleep(15), % gossiping is async so we need to wait a bit to the propagated data
+  ?assertEqual(foo_bar22, pes_cfg:get(test_data, foo_bar2)),
+
+  ok = simple_gossip:set(undefined),
+  timer:sleep(15), % gossiping is async so we need to wait a bit to the propagated data
+  ?assertEqual(foo_bar2, pes_cfg:get(test_data_undef, foo_bar2)),
+  timer:sleep(15), % gossiping is async so we need to wait a bit to the propagated data
+  ?assertEqual(foo_bar2, pes_cfg:get(test_data_undef, foo_bar2)),
+
+  simple_gossip:set(undefined),
+  timer:sleep(15), % gossiping is async so we need to wait a bit to the propagated data
+  pes_cfg:set(test_data_undef_foo, bar),
+  timer:sleep(15), % gossiping is async so we need to wait a bit to the propagated data
+  ?assertEqual(bar, pes_cfg:get(test_data_undef_foo, foo_bar2)),
+  ok.
+
+clean(_Config) ->
+  [pes:register_name("a_" ++ integer_to_list(I), ?TEST_PROCESS(100)) || I <- lists:seq(1, 100)],
+  InitialMemory = erlang:memory(ets),
+  OrigTimeout = pes_cfg:get(cleanup_period_time, 5000),
+  Threshold = pes_cfg:get(delete_time_threshold, 5000),
+  pes_cfg:set(cleanup_period_time, 100),
+  pes_cfg:set(delete_time_threshold, 100),
+  ct:sleep(OrigTimeout+100),
+  pes_cfg:set(cleanup_period_time, OrigTimeout),
+  pes_cfg:set(delete_time_threshold, Threshold),
+
+  ct:pal("i ~p > ~p~n", [erlang:memory(ets), InitialMemory]),
+  ?assert(erlang:memory(ets) < InitialMemory).
 
 cluster_group({setup, Config}) ->
   {ok, Node1} = pes_test_cluster:start_node(node_1),

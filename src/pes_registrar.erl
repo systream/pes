@@ -153,7 +153,7 @@ handle_event(enter, _, monitoring, #state{id = Id, term = Term, pid = Pid} = Sta
   %?trace("Entered monitoring", [], State#state.id),
   Now = pes_time:now(),
   Data = {Pid, self(), Now},
-  HeartBeat = application:get_env(pes, heartbeat, ?DEFAULT_HEARTBEAT) + rand:uniform(10),
+  HeartBeat = pes_cfg:get(heartbeat, ?DEFAULT_HEARTBEAT) + rand:uniform(10),
   Nodes = pes_cluster:nodes(),
   NewState = set_promises([commit(Node, Id, Term, Data) || Node <- Nodes], set_nodes(State, Nodes)),
   {keep_state, NewState#state{last_timestamp = Now}, [{state_timeout, HeartBeat, heartbeat}]};
