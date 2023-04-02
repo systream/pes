@@ -19,9 +19,9 @@
 -export([nodes/0, join/1, leave/1]).
 -export([start_link/0, init/1, handle_call/3, handle_cast/2, handle_info/2]).
 
--spec join(node()) -> ok.
+-spec join(node()) -> ok | {error, term()}.
 join(Node) ->
-  ok = simple_gossip:join(Node).
+  simple_gossip:join(Node).
 
 -spec leave(node()) -> ok.
 leave(Node) ->

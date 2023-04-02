@@ -1,4 +1,4 @@
 [{<<"simple_gossip">>,
   {git,"https://github.com/systream/simple_gossip.git",
-       {ref,"1575f3f65c9c058e4d7eb330912b81e22a22fcd0"}},
+       {ref,"1dcf3bfb3894e8cb6c6fa4601053804f509d7f80"}},
   0}].

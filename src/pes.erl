@@ -128,7 +128,7 @@ send(Name, Msg) ->
       exit({badarg, {Name, Msg}})
   end.
 
--spec join(node()) -> ok.
+-spec join(node()) -> ok | {error, term()}.
 join(Node) ->
   pes_cluster:join(Node).
 
