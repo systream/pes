@@ -6,7 +6,8 @@
   {applications,
    [kernel,
     stdlib,
-    simple_gossip
+    simple_gossip,
+    exometer_core
    ]},
   {env,[]},
   {modules, []},

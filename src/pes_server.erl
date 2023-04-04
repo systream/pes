@@ -86,6 +86,7 @@ loop(State) ->
   receive
     #pes_promise_call{from = From, command = Command} ->
       pes_promise:reply(From, handle_command(Command, State)),
+      pes_stat:count([server, request_count]),
       ?MODULE:loop(State);
     cleanup ->
       clean_expired_data(State),
@@ -106,9 +107,11 @@ handle_command({read, Id}, #state{data_storage_ref = DSR}) ->
 handle_command({prepare, Id, {Term, Server}}, #state{term_storage_ref = TSR}) ->
   case ets:lookup(TSR, Id) of
     [{Id, {StoredTerm, _StoredServer}}] when StoredTerm >= Term ->
+      pes_stat:count([server, nack]),
       nack;
     _ -> % not found or StoredTerm is lower than this
       true = ets:insert(TSR, {Id, {Term, Server}}),
+      pes_stat:count([server, ack]),
       ack
   end;
 handle_command({commit, Id, {Term, Server}, Value}, #state{data_storage_ref = DSR,
@@ -117,10 +120,13 @@ handle_command({commit, Id, {Term, Server}, Value}, #state{data_storage_ref = DS
     [{Id, {StoredTerm, StoredServer}}] when StoredTerm =:= Term andalso StoredServer =:= Server ->
       Now = pes_time:now(),
       true = ets:insert(DSR, {Id, {Term, Value}, Now}),
+      pes_stat:count([server, ack]),
       ack;
     [{Id, {StoredTerm, StoredServer}}] ->
+      pes_stat:count([server, nack]),
       {nack, {node(), {StoredTerm, StoredServer}}};
     [] ->
+      pes_stat:count([server, nack]),
       {nack, {node(), not_found}}
   end;
 % Commit can reply with nack and the actual term, and server data.
@@ -129,6 +135,7 @@ handle_command({commit, Id, {Term, Server}, Value}, #state{data_storage_ref = DS
 handle_command({repair, Id, Term, {NewTermId, _} = NewTerm, Value},
                 #state{data_storage_ref = DSR,
                        term_storage_ref = TSR}) ->
+  pes_stat:count([server, repair]),
   Result = case ets:lookup(TSR, Id) of
              [{Id, StoredTerm}] when StoredTerm =:= Term -> ack; % the term matches
              [] when Term =:= not_found -> ack;

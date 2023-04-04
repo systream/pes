@@ -25,7 +25,7 @@ async(Target, Command) ->
   send(Target, #pes_promise_call{from = {self(), Ref}, command = Command}),
   {promise, Ref}.
 
--spec await(promise()) -> {ok, term()} | {error, term()}.
+-spec await(promise()) -> term() | {error, term()}.
 await({promise, Ref}) ->
   receive
     #promise_reply{result = Result} = Reply ->

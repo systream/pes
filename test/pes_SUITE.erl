@@ -64,6 +64,7 @@ all() ->
     repair,
     cfg_set,
     clean,
+    stat,
     {group, cluster_group}
   ].
 
@@ -241,9 +242,29 @@ clean(_Config) ->
   ct:sleep(OrigTimeout+100),
   pes_cfg:set(cleanup_period_time, OrigTimeout),
   pes_cfg:set(delete_time_threshold, Threshold),
-
-  ct:pal("i ~p > ~p~n", [erlang:memory(ets), InitialMemory]),
   ?assert(erlang:memory(ets) < InitialMemory).
+
+stat(_Config) ->
+  [
+    {[registrar, active], ActiveRegistrarCount},
+    {[registrar, response_time], _RegRespTime},
+    {[server, request_count], _ReqC},
+    {[server, ack], _ServerAckRate},
+    {[server, nack], _ServerNackRate},
+    {[lookup, response_time], _LookupRespTime},
+    {[server, repair], _RepairC}
+  ] = pes:stat(),
+  yes = pes:register_name(send_undefined, ?TEST_PROCESS(1000)),
+  [
+    {[registrar, active], ActiveRegistrarCount2},
+    {[registrar, response_time], _},
+    {[server, request_count], _},
+    {[server, ack], _},
+    {[server, nack], _},
+    {[lookup, response_time], _},
+    {[server, repair], _}
+  ] = pes:stat(),
+  ?assert(ActiveRegistrarCount2 > ActiveRegistrarCount).
 
 cluster_group({setup, Config}) ->
   {ok, Node1} = pes_test_cluster:start_node(node_1),

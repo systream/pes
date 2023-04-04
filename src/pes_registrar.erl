@@ -23,7 +23,7 @@
 -export([register/2, unregister/1]).
 
 %% gen_statem callbacks
--export([init/1, handle_event/4, callback_mode/0]).
+-export([init/1, handle_event/4, callback_mode/0, terminate/3]).
 
 -record(state, {
   id :: term(),
@@ -48,6 +48,14 @@
   registered |
   {error, {could_not_register, Reason :: term()} | {already_registered, pid()} | timeout | term()}.
 register(Id, Value) ->
+  {Time, Result} = timer:tc(fun() -> do_register(Id, Value) end),
+  pes_stat:update([registrar, response_time], Time),
+  Result.
+
+-spec do_register(term(), pid()) ->
+  registered |
+  {error, {could_not_register, Reason :: term()} | {already_registered, pid()} | timeout | term()}.
+do_register(Id, Value) ->
   case gen_statem:start_monitor(?MODULE, {Id, Value, self()}, []) of
     {ok, {ServerPid, Ref}} ->
        receive
@@ -76,9 +84,11 @@ unregister(Server) ->
 -spec init({term(), pid(), pid()}) -> {ok, reg_check, state()}.
 init({Id, Pid, Caller}) ->
   %?trace("Staring FSM for ~p ", [Pid], Id),
+  erlang:process_flag(trap_exit, true),
   erlang:monitor(process, Pid),
   Nodes = pes_cluster:nodes(),
   Majority = majority(Nodes),
+  ok = pes_stat:increase([registrar, active]),
   {ok, reg_check, #state{id = Id, caller = Caller, pid = Pid, nodes = Nodes, majority = Majority}}.
 
 -spec callback_mode() -> [handle_event_function | state_enter].
@@ -189,6 +199,13 @@ handle_event(info, #promise_reply{} = Reply, _StateName, _State) ->
   %?trace("[~p] reply dropped ~p", [StateName, Reply], State#state.id),
   keep_state_and_data.
 
+-spec  terminate(Reason :: 'normal' | 'shutdown' | {'shutdown', term()}| term(),
+                 State :: state(),
+                 Data :: term()) ->
+  ok.
+terminate(_Reason, _State, _Data) ->
+  pes_stat:decrease([registrar, active]),
+  ok.
 
 %%%===================================================================
 %%% Internal functions

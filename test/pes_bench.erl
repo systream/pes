@@ -10,6 +10,7 @@
 rep(Concurrency, KeySpace, ProcessMaxAliveTime, TimeR, Rate, Time) ->
   spawn(fun() ->
     F = fun R () ->
+          rpc:multicall([node() | nodes()], pes_bench, alive_process_counter, []),
           rpc:multicall([node() | nodes()], pes_bench, load, [Concurrency, KeySpace, ProcessMaxAliveTime, TimeR, Rate]),
           R()
         end,
@@ -67,9 +68,14 @@ wait_for_ready([{Pid, Ref} | Rest]) ->
 
 alive_process_counter() ->
   spawn(fun() ->
-    erlang:register(alive_process_counter, self()),
-    self() ! tick,
-    alive_process_counter(0)
+    case erlang:whereis(alive_process_counter) of
+      undefined ->
+        erlang:register(alive_process_counter, self()),
+        self() ! tick,
+        alive_process_counter(0);
+      _ ->
+        already_started
+    end
   end).
 
 alive_process_counter(Count) ->
@@ -78,7 +84,7 @@ alive_process_counter(Count) ->
       erlang:monitor(process, Pid),
       alive_process_counter(Count+1);
     tick when Count > 0 ->
-      io:format(user, "alive process count: ~p~n", [Count]),
+      io:format(user, "~n*** * Stat * ***~n~p~n", [pes:stat()]),
       erlang:send_after(1000, self(), tick),
       alive_process_counter(Count);
     tick ->

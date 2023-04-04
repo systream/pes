@@ -14,7 +14,7 @@
 
 %% API
 -export([register_name/2, unregister_name/1, whereis_name/1, send/2,
-  join/1, leave/1]).
+  join/1, leave/1, stat/0]).
 
 -spec register_name(Name, Pid) -> 'yes' | 'no' when
   Name :: term(),
@@ -63,10 +63,13 @@ lookup(Name, Retry) ->
 lookup(Name, Retry, Timeout) ->
   Parent = self(),
   Gatherer = spawn_link(fun() ->
+    StartTime = erlang:system_time(microsecond),
     Nodes = pes_cluster:nodes(),
     Majority = (length(Nodes) div 2) + 1,
     Promises = [pes_proxy:read(Node, Name) || Node <- Nodes],
-    Parent ! {'$reply', self(), wait_for_responses(Majority, Promises, #{})}
+    Response = wait_for_responses(Majority, Promises, #{}),
+    erlang:send(Parent, {'$reply', self(), Response}),
+    pes_stat:update([lookup, response_time], erlang:system_time(microsecond) - StartTime)
   end),
   receive
     {'$reply', Gatherer, {ok, _Term, {Pid, GuardPid}}} ->
@@ -76,7 +79,7 @@ lookup(Name, Retry, Timeout) ->
     {'$reply', Gatherer, not_found} ->
       undefined;
     {'$reply', Gatherer, {error, no_consensus}} when Retry > 0 ->
-      timer:sleep(5),
+      timer:sleep(rand:uniform(10)),
       lookup(Name, Retry - 1);
     {'$reply', Gatherer, {error, no_consensus}} ->
       {error, no_consensus}
@@ -135,3 +138,7 @@ join(Node) ->
 -spec leave(node()) -> ok.
 leave(Node) ->
   pes_cluster:leave(Node).
+
+-spec stat() -> [{list(atom()), number()}].
+stat() ->
+  pes_stat:stat().

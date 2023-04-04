@@ -1,4 +1,20 @@
-[{<<"simple_gossip">>,
+{"1.1.0",
+[{<<"bear">>,{pkg,<<"bear">>,<<"1.0.0">>},2},
+ {<<"exometer_core">>,{pkg,<<"exometer_core">>,<<"1.6.2">>},0},
+ {<<"folsom">>,{pkg,<<"folsom">>,<<"1.0.0">>},1},
+ {<<"hut">>,{pkg,<<"hut">>,<<"1.3.0">>},1},
+ {<<"parse_trans">>,{pkg,<<"parse_trans">>,<<"3.4.1">>},1},
+ {<<"setup">>,{pkg,<<"setup">>,<<"2.1.0">>},1},
+ {<<"simple_gossip">>,
   {git,"https://github.com/systream/simple_gossip.git",
        {ref,"1dcf3bfb3894e8cb6c6fa4601053804f509d7f80"}},
-  0}].
+  0}]}.
+[
+{pkg_hash,[
+ {<<"bear">>, <<"430419C1126B477686CDE843E88BA0F2C7DC5CDF0881C677500074F704339A99">>},
+ {<<"exometer_core">>, <<"E480FBD9CF3BECFCA15805BDD42C39CD855CF701C2F0204BAD9C096C74FDCAA8">>},
+ {<<"folsom">>, <<"50ECC998D2149939F1D5E0AA3E32788F8ED16A58E390D81B5C0BE4CC4EF25589">>},
+ {<<"hut">>, <<"71F2F054E657C03F959CF1ACC43F436EA87580696528CA2A55C8AFB1B06C85E7">>},
+ {<<"parse_trans">>, <<"6E6AA8167CB44CC8F39441D05193BE6E6F4E7C2946CB2759F015F8C56B76E5FF">>},
+ {<<"setup">>, <<"05F69185A5EB71474C9BC6BA892565651EC7507791F85632B7B914DBFE130510">>}]}
+].

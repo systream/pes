@@ -9,6 +9,7 @@
 
 -spec start(_, _) -> {ok, pid()}.
 start(_StartType, _StartArgs) ->
+    pes_stat:init(),
     pes_sup:start_link().
 
 -spec stop(_) -> ok.
