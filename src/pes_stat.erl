@@ -46,9 +46,9 @@ stat() ->
   [
     {[registrar, active], ActiveRegistrarCount},
     {[registrar, response_time], histogram([registrar, response_time])},
-    {[server, request_count], ReqC},
-    {[server, ack], ServerAckRate},
-    {[server, nack], ServerNackRate},
+    {[server, request_count], ReqC div 60},
+    {[server, ack], ServerAckRate div 60},
+    {[server, nack], ServerNackRate div 60},
     {[lookup, response_time], histogram([lookup, response_time])},
     {[server, repair], RepairC}
   ].
