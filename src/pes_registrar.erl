@@ -122,7 +122,7 @@ handle_event({call, From}, stop, StateName, #state{id = Id, term = Term, nodes =
 % read
 handle_event(enter, _, reg_check, #state{id = Id, nodes = Nodes} = State) ->
   %?trace("Entered reg check", [], Id),
-  {keep_state, set_promises([pes_proxy:read(Node, Id) || Node <- Nodes], State)};
+  {keep_state, set_promises([pes_server_sup:read(Node, Id) || Node <- Nodes], State)};
 handle_event(info, #promise_reply{ref = Ref, result = Response} = Reply, reg_check, State) ->
   pes_promise:resolved(Reply),
   handle_read(Ref, Response, State);
@@ -154,6 +154,7 @@ handle_event(info, {'DOWN', Ref, process, _Pid, Reason}, commit, State) ->
 handle_event(enter, _, registered, State) ->
   %?trace("Entered registered", [], State#state.id),
   reply(State, registered),
+  pes_stat:count([registrar, started]),
   {keep_state, State#state{replies = #{}}, {state_timeout, 0, monitoring}};
 handle_event(state_timeout, monitoring, registered, #state{} = State) ->
   {next_state, monitoring, State};
@@ -260,7 +261,10 @@ handle_read(Ref, Reply, State) ->
     {{ok, GetTerm, undefined}, NewState = #state{term = Term}} ->
       {next_state, prepare, increase_term(NewState#state{term = max(GetTerm, Term)})};
     {not_found, NewState} ->
-      {next_state, prepare, NewState}
+      {next_state, prepare, NewState};
+    {{error, _} = Error, NewState} ->
+      reply(State, Error),
+      {stop, normal, NewState}
   end.
 
 handle_consensus_responses(Ref, Reply, State, NextState) ->
@@ -355,13 +359,13 @@ is_process_alive(Pid) ->
   end.
 
 prepare(Node, Id, Term) ->
-  pes_proxy:prepare(Node, Id, encapsulate_term(Term)).
+  pes_server_sup:prepare(Node, Id, encapsulate_term(Term)).
 
 commit(Node, Id, Term, Value) ->
-  pes_proxy:commit(Node, Id, encapsulate_term(Term), Value).
+  pes_server_sup:commit(Node, Id, encapsulate_term(Term), Value).
 
 repair(Node, Id, OldTerm, NewTerm, Value) ->
-  pes_promise:await(pes_proxy:repair(Node, Id, OldTerm, encapsulate_term(NewTerm), Value)).
+  pes_promise:await(pes_server_sup:repair(Node, Id, OldTerm, encapsulate_term(NewTerm), Value)).
 
 encapsulate_term(Term) ->
   {Term, self()}.

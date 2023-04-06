@@ -35,7 +35,7 @@ init([]) ->
           type => worker,
           modules => [pes_cfg]},
   Acceptor = #{id => pes_server_cluster,
-               start => {pes_proxy, start_link, [shard_count()]},
+               start => {pes_server_sup, start_link, [shard_count()]},
                restart => permanent,
                shutdown => 5000,
                type => supervisor,

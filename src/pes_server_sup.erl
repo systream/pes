@@ -5,7 +5,7 @@
 %%%
 %%% @end
 %%%-------------------------------------------------------------------
--module(pes_proxy).
+-module(pes_server_sup).
 -behaviour(supervisor).
 
 % @TODO different nodes can have different pes_server shard count, and it does not work!!! :/

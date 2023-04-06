@@ -157,7 +157,7 @@ register_guard_process_died(_Config) ->
   TestPid = ?TEST_PROCESS(1000),
   Id = <<"procs_reg_guard_died_1">>,
   ?assertEqual(yes, pes:register_name(Id, TestPid)),
-  {ok, _Term, {TestPid, GuardPid, _Ts}} = pes_promise:await(pes_proxy:read(node(), Id)),
+  {ok, _Term, {TestPid, GuardPid, _Ts}} = pes_promise:await(pes_server_sup:read(node(), Id)),
   exit(GuardPid, kill),
   % need to wait the timeout threshold time
   ct:sleep(?TEST_PROCESS_TIMEOUT+5),
@@ -358,7 +358,7 @@ register_previous_record_expired_but_alive(Config) ->
   ok.
 
 pes_call(Function, Args) ->
-  pes_promise:await(apply(pes_proxy, Function, Args)).
+  pes_promise:await(apply(pes_server_sup, Function, Args)).
 
 
 fake_entry(Node, Id, Term, Pid) ->
@@ -367,8 +367,8 @@ fake_entry(Node, Id, Term, Pid) ->
 fake_entry(Node, Id, Term, GuardProcess, Pid, Ts) ->
   S = self(),
   P = spawn_link(fun() ->
-      pes_proxy:prepare(Node, Id, {Term, GuardProcess}),
-      pes_proxy:commit(Node, Id, {Term, GuardProcess}, {Pid, GuardProcess, Ts}),
+      pes_server_sup:prepare(Node, Id, {Term, GuardProcess}),
+      pes_server_sup:commit(Node, Id, {Term, GuardProcess}, {Pid, GuardProcess, Ts}),
       S ! {self(), done}
     end),
   receive {P, done} -> ok end.

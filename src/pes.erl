@@ -23,7 +23,10 @@ register_name(Name, Pid) when is_pid(Pid) ->
   case pes_registrar:register(Name, Pid) of
     registered ->
       yes;
-    _Reason ->
+    {error, {already_registered, _}} ->
+      no;
+    Reason ->
+      logger:notice("Could not register ~p name: ~p", [Name, Reason]),
       no
   end.
 
@@ -66,7 +69,7 @@ lookup(Name, Retry, Timeout) ->
     StartTime = erlang:system_time(microsecond),
     Nodes = pes_cluster:nodes(),
     Majority = (length(Nodes) div 2) + 1,
-    Promises = [pes_proxy:read(Node, Name) || Node <- Nodes],
+    Promises = [pes_server_sup:read(Node, Name) || Node <- Nodes],
     Response = wait_for_responses(Majority, Promises, #{}),
     erlang:send(Parent, {'$reply', self(), Response}),
     pes_stat:update([lookup, response_time], erlang:system_time(microsecond) - StartTime)

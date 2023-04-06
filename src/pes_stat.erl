@@ -14,6 +14,7 @@
 init() ->
   ok = exometer:ensure([pes, registrar, active], counter, []),
   ok = exometer:ensure([pes, registrar, response_time], histogram, []),
+  ok = exometer:ensure([pes, registrar, started], spiral, []),
   ok = exometer:ensure([pes, server, ack], spiral, []),
   ok = exometer:ensure([pes, server, nack], spiral, []),
   ok = exometer:ensure([pes, server, repair], spiral, []),
@@ -43,9 +44,11 @@ stat() ->
   {ok, [{one, ServerNackRate}]} = exometer:get_value([pes, server, nack], one),
   {ok, [{one, ReqC}]} = exometer:get_value([pes, server, request_count], one),
   {ok, [{one, RepairC}]} = exometer:get_value([pes, server, repair], one),
+  {ok, [{one, Started}]} = exometer:get_value([pes, registrar, started], one),
   [
     {[registrar, active], ActiveRegistrarCount},
     {[registrar, response_time], histogram([registrar, response_time])},
+    {[registrar, start_rate], Started div 60},
     {[server, request_count], ReqC div 60},
     {[server, ack], ServerAckRate div 60},
     {[server, nack], ServerNackRate div 60},
