@@ -102,7 +102,7 @@ pes_server(_Config) ->
   ok.
 
 pes_server_live_upgrade(_Config) ->
-  {_, Pid, worker, _} = hd(supervisor:which_children(pes_proxy)),
+  {_, Pid, worker, _} = hd(supervisor:which_children(pes_server_sup)),
   ok = sys:suspend(Pid),
   ok = sys:change_code(Pid, pes_server, undefined, []),
   ok = sys:resume(Pid),
@@ -247,17 +247,19 @@ clean(_Config) ->
 stat(_Config) ->
   [
     {[registrar, active], ActiveRegistrarCount},
-    {[registrar, response_time], _RegRespTime},
-    {[server, request_count], _ReqC},
-    {[server, ack], _ServerAckRate},
-    {[server, nack], _ServerNackRate},
-    {[lookup, response_time], _LookupRespTime},
-    {[server, repair], _RepairC}
+    {[registrar, response_time], _},
+    {[registrar, start_rate], _},
+    {[server, request_count], _},
+    {[server, ack], _},
+    {[server, nack], _},
+    {[lookup, response_time], _},
+    {[server, repair], _}
   ] = pes:stat(),
   yes = pes:register_name(send_undefined, ?TEST_PROCESS(1000)),
   [
     {[registrar, active], ActiveRegistrarCount2},
     {[registrar, response_time], _},
+    {[registrar, start_rate], _},
     {[server, request_count], _},
     {[server, ack], _},
     {[server, nack], _},

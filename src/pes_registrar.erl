@@ -155,7 +155,8 @@ handle_event(enter, _, registered, State) ->
   %?trace("Entered registered", [], State#state.id),
   reply(State, registered),
   pes_stat:count([registrar, started]),
-  {keep_state, State#state{replies = #{}}, {state_timeout, 0, monitoring}};
+  HeartBeat = pes_cfg:get(heartbeat, ?DEFAULT_HEARTBEAT),
+  {keep_state, State#state{replies = #{}}, {state_timeout, HeartBeat, monitoring}};
 handle_event(state_timeout, monitoring, registered, #state{} = State) ->
   {next_state, monitoring, State};
 
@@ -164,7 +165,7 @@ handle_event(enter, _, monitoring, #state{id = Id, term = Term, pid = Pid} = Sta
   %?trace("Entered monitoring", [], State#state.id),
   Now = pes_time:now(),
   Data = {Pid, self(), Now},
-  HeartBeat = pes_cfg:get(heartbeat, ?DEFAULT_HEARTBEAT) + rand:uniform(10),
+  HeartBeat = pes_cfg:get(heartbeat, ?DEFAULT_HEARTBEAT) + rand:uniform(5),
   Nodes = pes_cluster:nodes(),
   NewState = set_promises([commit(Node, Id, Term, Data) || Node <- Nodes], set_nodes(State, Nodes)),
   {keep_state, NewState#state{last_timestamp = Now}, [{state_timeout, HeartBeat, heartbeat}]};
@@ -200,7 +201,7 @@ handle_event(info, #promise_reply{} = Reply, _StateName, _State) ->
   %?trace("[~p] reply dropped ~p", [StateName, Reply], State#state.id),
   keep_state_and_data.
 
--spec  terminate(Reason :: 'normal' | 'shutdown' | {'shutdown', term()}| term(),
+-spec  terminate(Reason :: 'normal' | 'shutdown' | {'shutdown', term()} | term(),
                  State :: state(),
                  Data :: term()) ->
   ok.
@@ -395,7 +396,7 @@ set_nodes(State, Nodes) ->
   State#state{nodes = Nodes, majority = majority(Nodes)}.
 
 unregister_from_catalog(StateName, Id, Term, Nodes)
-  when StateName =:= monitoring orelse StateName =:= update_entry ->
+  when StateName =:= monitoring orelse StateName =:= registered ->
   [commit(Node, Id, Term, undefined) || Node <- Nodes],
   committed;
 unregister_from_catalog(_StateName, _Id, _Term, _Nodes) ->
