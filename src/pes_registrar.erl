@@ -159,6 +159,12 @@ handle_event(enter, _, registered, State) ->
   {keep_state, State#state{replies = #{}}, {state_timeout, HeartBeat, monitoring}};
 handle_event(state_timeout, monitoring, registered, #state{} = State) ->
   {next_state, monitoring, State};
+handle_event(info, {'DOWN', Ref, process, _Pid, _Reason}, registered,
+             #state{promises = Promises} = State) ->
+  % In this state we have the majority so
+  % if one node went down we are not affected (at least until the next heartbeat),
+  % but need to handle the incoming msg
+  {keep_state, State#state{promises = lists:delete({promise, Ref}, Promises)}};
 
 % heartbeat
 handle_event(enter, _, monitoring, #state{id = Id, term = Term, pid = Pid} = State) ->
