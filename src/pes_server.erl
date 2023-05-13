@@ -67,7 +67,15 @@ repair(Node, Id, CurrentTerm, NewTerm, Value) ->
 
 -spec async(target(), term()) -> pes_promise:promise().
 async({Server, Node}, Command) ->
-  pes_promise:async({Server, Node}, Command).
+  case pes_cluster:is_node_alive(Node) of
+    true -> %
+      pes_promise:async({Server, Node}, Command);
+    false ->
+      % fake promise, fake down message
+      Ref = make_ref(),
+      self() ! {'DOWN', Ref, process, {Server, Node}, noconnection},
+      {promise, Ref}
+  end.
 
 -spec start_link(atom()) -> {ok, pid()}.
 start_link(Server) ->

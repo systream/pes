@@ -12,11 +12,12 @@
 
 -define(NODES_KEY, {?MODULE, nodes}).
 -define(SERVER, ?MODULE).
+-define(DEAD_NODES_KEY(Node), {?MODULE, dead_nodes, Node}).
 
 -record(state, {}).
 
 %% API
--export([nodes/0, join/1, leave/1]).
+-export([nodes/0, join/1, leave/1, live_nodes/0, is_node_alive/1]).
 -export([start_link/0, init/1, handle_call/3, handle_cast/2, handle_info/2]).
 
 -spec join(node()) -> ok | {error, term()}.
@@ -34,6 +35,14 @@ leave(Node) ->
 -spec nodes() -> [node()].
 nodes() ->
   persistent_term:get(?NODES_KEY, [node()]).
+
+-spec live_nodes() -> [node()].
+live_nodes() ->
+  lists:filter(fun is_node_alive/1, nodes()).
+
+-spec is_node_alive(node()) -> boolean().
+is_node_alive(Node) ->
+  not persistent_term:get(?DEAD_NODES_KEY(Node), false).
 
 cluster_nodes() ->
   case simple_gossip:status() of
@@ -73,6 +82,31 @@ handle_info({rumor_changed, Rumor}, State) ->
   CurrentNodes = lists:usort(nodes()),
   case CurrentNodes =:= Nodes of
     true -> ok;
-    _ -> persistent_term:put(?NODES_KEY, Nodes)
+    _ ->
+      persistent_term:put(?NODES_KEY, Nodes),
+      % clean dead node registry for removed nodes
+      lists:foreach(fun (Node) ->
+                      persistent_term:erase(?DEAD_NODES_KEY(Node))
+                    end, CurrentNodes -- Nodes)
+  end,
+  {noreply, State};
+handle_info({nodeup, Node}, State) ->
+  case lists:member(Node, nodes()) of
+    true ->
+      persistent_term:erase(?DEAD_NODES_KEY(Node)),
+      logger:info("Cluster Member ~p become UP", [Node]),
+      ok;
+    _ ->
+      ok
+  end,
+  {noreply, State};
+
+handle_info({nodedown, Node}, State) ->
+  case lists:member(Node, nodes()) of
+    true ->
+      persistent_term:put(?DEAD_NODES_KEY(Node), true),
+      logger:warning("Cluster Member ~p went DOWN", [Node]);
+    _ ->
+      ok
   end,
   {noreply, State}.

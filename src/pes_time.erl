@@ -7,8 +7,6 @@
 %%%-------------------------------------------------------------------
 -module(pes_time).
 
--define(DEFAULT_PROCESS_TIMEOUT, 12000).
-
 -compile({no_auto_import, [now/0]}).
 
 %% API
@@ -20,4 +18,4 @@ now() ->
 
 -spec is_expired(pos_integer()) -> boolean().
 is_expired(Time) ->
-  Time + application:get_env(pes, process_timeout, ?DEFAULT_PROCESS_TIMEOUT) < now().
+  Time + (pes_cfg:heartbeat() * 3) < now().

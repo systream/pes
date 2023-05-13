@@ -9,6 +9,7 @@
 -behaviour(gen_server).
 
 -define(SERVER, ?MODULE).
+-define(DEFAULT_HEARTBEAT, 8048).
 
 -record(state, {}).
 -define(KEY(K), {?MODULE, K}).
@@ -16,7 +17,7 @@
 %% API
 -export([start_link/0, init/1, handle_call/3, handle_cast/2, handle_info/2]).
 
--export([set/2, get/2]).
+-export([set/2, get/2, heartbeat/0]).
 
 
 %%%===================================================================
@@ -25,6 +26,10 @@
 
 %% pes_cfg:set(cleanup_period_time, 25000).
 %% pes_cfg:set(delete_limit, 100).
+
+-spec heartbeat() -> pos_integer().
+heartbeat() ->
+  get(heartbeat, ?DEFAULT_HEARTBEAT).
 
 -spec get(term(), term()) -> term().
 get(Key, Default) ->

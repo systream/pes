@@ -11,7 +11,6 @@
 -compile({no_auto_import, [is_process_alive/1]}).
 -include_lib("pes_promise.hrl").
 
--define(DEFAULT_HEARTBEAT, 8048).
 -define(DEFAULT_TIMEOUT, 5000).
 
 %-define(trace(Msg, Args), io:format(user, Msg ++ "~n", Args)).
@@ -48,14 +47,20 @@
   registered |
   {error, {could_not_register, Reason :: term()} | {already_registered, pid()} | timeout | term()}.
 register(Id, Value) ->
-  {Time, Result} = timer:tc(fun() -> do_register(Id, Value) end),
+  register(Id, Value, ?DEFAULT_TIMEOUT).
+
+-spec register(term(), pid(), pos_integer()) ->
+  registered |
+  {error, {could_not_register, Reason :: term()} | {already_registered, pid()} | timeout | term()}.
+register(Id, Value, Timeout) ->
+  {Time, Result} = timer:tc(fun() -> do_register(Id, Value, Timeout) end),
   pes_stat:update([registrar, response_time], Time),
   Result.
 
--spec do_register(term(), pid()) ->
+-spec do_register(term(), pid(), pos_integer()) ->
   registered |
   {error, {could_not_register, Reason :: term()} | {already_registered, pid()} | timeout | term()}.
-do_register(Id, Value) ->
+do_register(Id, Value, Timeout) ->
   case gen_statem:start_monitor(?MODULE, {Id, Value, self()}, []) of
     {ok, {ServerPid, Ref}} ->
        receive
@@ -64,7 +69,7 @@ do_register(Id, Value) ->
            Result;
          {'DOWN', Ref, process, ServerPid, Reason} ->
            {error, Reason}
-       after ?DEFAULT_TIMEOUT ->
+       after Timeout ->
          exit(ServerPid, kill),
          erlang:demonitor(Ref, [flush]),
          {error, timeout}
@@ -155,7 +160,7 @@ handle_event(enter, _, registered, State) ->
   %?trace("Entered registered", [], State#state.id),
   reply(State, registered),
   pes_stat:count([registrar, started]),
-  HeartBeat = pes_cfg:get(heartbeat, ?DEFAULT_HEARTBEAT),
+  HeartBeat = pes_cfg:heartbeat(),
   {keep_state, State#state{replies = #{}}, {state_timeout, HeartBeat, monitoring}};
 handle_event(state_timeout, monitoring, registered, #state{} = State) ->
   {next_state, monitoring, State};
@@ -171,7 +176,7 @@ handle_event(enter, _, monitoring, #state{id = Id, term = Term, pid = Pid} = Sta
   %?trace("Entered monitoring", [], State#state.id),
   Now = pes_time:now(),
   Data = {Pid, self(), Now},
-  HeartBeat = pes_cfg:get(heartbeat, ?DEFAULT_HEARTBEAT) + rand:uniform(5),
+  HeartBeat = pes_cfg:heartbeat() + rand:uniform(5),
   Nodes = pes_cluster:nodes(),
   NewState = set_promises([commit(Node, Id, Term, Data) || Node <- Nodes], set_nodes(State, Nodes)),
   {keep_state, NewState#state{last_timestamp = Now}, [{state_timeout, HeartBeat, heartbeat}]};
