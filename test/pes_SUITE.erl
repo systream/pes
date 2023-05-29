@@ -10,16 +10,15 @@
 %%--------------------------------------------------------------------
 
 -define(TEST_PROCESS(TTL), spawn(fun() -> timer:sleep(TTL) end)).
--define(TEST_PROCESS_TIMEOUT, 2000).
 -define(TEST_HEARTBEAT_TIMEOUT, 500).
 
 suite() ->
   [{timetrap, {minutes, 10}}].
 
 init_per_suite(Config) ->
-  {ok, _} = application:ensure_all_started(pes),
-  application:set_env(pes, process_timeout, ?TEST_PROCESS_TIMEOUT),
   application:set_env(pes, heartbeat, ?TEST_HEARTBEAT_TIMEOUT),
+  {ok, _} = application:ensure_all_started(pes),
+  pes_cfg:set(heartbeat, ?TEST_HEARTBEAT_TIMEOUT),
   Config.
 
 end_per_suite(_Config) ->
@@ -160,7 +159,7 @@ register_guard_process_died(_Config) ->
   {ok, _Term, {TestPid, GuardPid, _Ts}} = pes_promise:await(pes_server_sup:read(node(), Id)),
   exit(GuardPid, kill),
   % need to wait the timeout threshold time
-  ct:sleep(?TEST_PROCESS_TIMEOUT+5),
+  ct:sleep((pes_cfg:heartbeat() * 3)+5),
   ?assertEqual(undefined, pes:whereis_name(Id)),
   ok.
 

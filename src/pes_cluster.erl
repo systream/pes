@@ -62,6 +62,7 @@ start_link() ->
 init(_) ->
   simple_gossip:subscribe(self(), rumor),
   persistent_term:put(?NODES_KEY, cluster_nodes()),
+  ok = net_kernel:monitor_nodes(true),
   {ok, #state{}}.
 
 -spec handle_call(Request :: term(), From :: {pid(), Tag :: term()}, State :: term()) ->
