@@ -55,6 +55,7 @@ all() ->
     re_register,
     register_already_running,
     register_monitored_process_died,
+    register_monitored_process_shutdown,
     register_died_process,
     register_guard_process_died,
     send_undefined,
@@ -140,6 +141,16 @@ register_monitored_process_died(_Config) ->
   Id = <<"proc_died">>,
   ?assertEqual(yes, pes:register_name(Id, TestPid)),
   exit(TestPid, kill),
+  % need some to to process down messages
+  ct:sleep(10),
+  ?assertEqual(undefined, pes:whereis_name(Id)),
+  ok.
+
+register_monitored_process_shutdown(_Config) ->
+  TestPid = ?TEST_PROCESS(1000),
+  Id = <<"proc_shutdown">>,
+  ?assertEqual(yes, pes:register_name(Id, TestPid)),
+  exit(TestPid, shutdown),
   % need some to to process down messages
   ct:sleep(10),
   ?assertEqual(undefined, pes:whereis_name(Id)),

@@ -111,6 +111,7 @@ handle_event(info, {'DOWN', _Ref, process, Pid, Reason}, StateName,
   end,
   case Reason of
     normal -> {stop, normal, State};
+    shutdown -> {stop, normal, State};
     _ -> {stop, {registered_process_died, Pid, Reason, StateName}, State}
   end;
 handle_event({call, From}, stop, StateName, #state{id = Id, term = Term, nodes = Nodes} = State) ->
