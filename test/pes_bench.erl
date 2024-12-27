@@ -19,7 +19,7 @@ rep(Concurrency, KeySpace, ProcessMaxAliveTime, TimeR, Rate, Time) ->
   end).
 
 on_all_nodes(Nodes, Concurrency, KeySpace, ProcessMaxAliveTime, Count) ->
-  [pes_cluster:join(N) || N <- Nodes],
+  [pes:join(N) || N <- Nodes],
   rpc:multicall(?MODULE, test, [Concurrency, KeySpace, ProcessMaxAliveTime, Count]).
 
 load(Concurrency, KeySpace, ProcessMaxAliveTime, Time, Rate) ->

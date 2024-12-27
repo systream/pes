@@ -6,16 +6,14 @@
 %%%-------------------------------------------------------------------
 -module(pes_cfg).
 
--behaviour(gen_server).
-
--define(SERVER, ?MODULE).
 -define(DEFAULT_HEARTBEAT, 8048).
 
--record(state, {}).
 -define(KEY(K), {?MODULE, K}).
 
+-behavior(pes_gen_process).
+
 %% API
--export([start_link/0, init/1, handle_call/3, handle_cast/2, handle_info/2]).
+-export([start_link/0, init/0, handle_message/2]).
 
 -export([set/2, get/2, heartbeat/0]).
 
@@ -71,31 +69,19 @@ do_set_if_not_set(Key, Value, Data) ->
 -spec(start_link() ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link() ->
-  gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+  pes_gen_process:start_link(?MODULE).
 
--spec init(Args :: term()) -> {ok, State :: term()}.
-init(_) ->
+-spec init() -> {ok, no_state}.
+init() ->
   simple_gossip:subscribe(self(), data),
-  {ok, #state{}}.
+  {ok, no_state}.
 
--spec handle_call(Request :: term(), From :: {pid(), Tag :: term()}, State :: term()) ->
-  no_return().
-handle_call(_Request, _From, _State) ->
-  erlang:error(not_implemented).
-
--spec handle_cast(Request :: term(), State :: term()) -> no_return().
-handle_cast(_Request, _State) ->
-  erlang:error(not_implemented).
-
--spec handle_info(Info :: timeout | term(), State :: term()) ->
-  {noreply, NewState :: term()} |
-  {noreply, NewState :: term(), timeout() | hibernate | {continue, term()}} |
-  {stop, Reason :: term(), NewState :: term()}.
-handle_info({data_changed, undefined}, State) ->
-  {noreply, State};
-handle_info({data_changed, Data}, State) ->
+-spec handle_message({data_changed, term()}, term()) -> {ok, term()}.
+handle_message({data_changed, undefined}, State) ->
+  {ok, State};
+handle_message({data_changed, Data}, State) ->
   persist(Data),
-  {noreply, State}.
+  {ok, State}.
 
 -spec persist(map()) -> ok.
 persist(Data) ->

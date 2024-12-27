@@ -82,7 +82,7 @@ lookup(Name, Retry, Timeout) ->
     {'$reply', Gatherer, not_found} ->
       undefined;
     {'$reply', Gatherer, {error, no_consensus}} when Retry > 0 ->
-      timer:sleep(rand:uniform(10)),
+      timer:sleep(2 + rand:uniform(8)),
       lookup(Name, Retry - 1);
     {'$reply', Gatherer, {error, no_consensus}} ->
       {error, no_consensus}

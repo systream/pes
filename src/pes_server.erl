@@ -79,12 +79,12 @@ async({Server, Node}, Command) ->
 
 -spec start_link(atom()) -> {ok, pid()}.
 start_link(Server) ->
-  proc_lib:start_link(?MODULE, init, [{Server, self()}]).
+  proc_lib:start_link(?MODULE, init, [Server]).
 
--spec init({atom(), pid()}) -> no_return().
-init({Server, Parent}) ->
+-spec init(atom()) -> no_return().
+init(Server) ->
   true = erlang:register(Server, self()),
-  proc_lib:init_ack(Parent, {ok, self()}),
+  proc_lib:init_ack({ok, self()}),
   schedule_cleanup(),
   loop(#state{term_storage_ref = ets:new(?TERM_STORAGE, [protected, compressed]),
               data_storage_ref = ets:new(?DATA_STORAGE, [protected, compressed])}).
@@ -101,7 +101,8 @@ loop(State) ->
       schedule_cleanup(),
       ?MODULE:loop(State);
     {system, From, Request} ->
-      sys:handle_system_msg(Request, From, self(), ?MODULE, [], undefined)
+      [Parent|_] = get('$ancestors'),
+      sys:handle_system_msg(Request, From, Parent, ?MODULE, [], undefined)
   end.
 
 -spec handle_command(term(), state()) -> term().

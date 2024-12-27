@@ -12,6 +12,8 @@
 
 -export([start_link/1, prepare/3, commit/4, read/2, repair/5]).
 
+-export([servers/0]).
+
 -export([init/1]).
 
 -define(SERVER, ?MODULE).

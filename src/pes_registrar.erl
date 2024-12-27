@@ -61,21 +61,17 @@ register(Id, Value, Timeout) ->
   registered |
   {error, {could_not_register, Reason :: term()} | {already_registered, pid()} | timeout | term()}.
 do_register(Id, Value, Timeout) ->
-  case gen_statem:start_monitor(?MODULE, {Id, Value, self()}, []) of
-    {ok, {ServerPid, Ref}} ->
-       receive
-         {'$reply', ServerPid, Result} ->
-           erlang:demonitor(Ref, [flush]),
-           Result;
-         {'DOWN', Ref, process, ServerPid, Reason} ->
-           {error, Reason}
-       after Timeout ->
-         exit(ServerPid, kill),
-         erlang:demonitor(Ref, [flush]),
-         {error, timeout}
-       end;
-    {error, _} = Error ->
-      Error
+  {ok, {ServerPid, Ref}} = gen_statem:start_monitor(?MODULE, {Id, Value, self()}, []),
+  receive
+    {'$reply', ServerPid, Result} ->
+      erlang:demonitor(Ref, [flush]),
+      Result;
+    {'DOWN', Ref, process, ServerPid, Reason} ->
+      {error, Reason}
+  after Timeout ->
+    exit(ServerPid, kill),
+    erlang:demonitor(Ref, [flush]),
+    {error, timeout}
   end.
 
 -spec unregister(pid()) -> ok.

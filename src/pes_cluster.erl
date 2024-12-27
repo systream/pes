@@ -7,18 +7,15 @@
 %%%-------------------------------------------------------------------
 -module(pes_cluster).
 
--behaviour(gen_server).
+-behavior(pes_gen_process).
 -compile({no_auto_import, [nodes/0]}).
 
 -define(NODES_KEY, {?MODULE, nodes}).
--define(SERVER, ?MODULE).
 -define(DEAD_NODES_KEY(Node), {?MODULE, dead_nodes, Node}).
-
--record(state, {}).
 
 %% API
 -export([nodes/0, join/1, leave/1, live_nodes/0, is_node_alive/1]).
--export([start_link/0, init/1, handle_call/3, handle_cast/2, handle_info/2]).
+-export([start_link/0, init/0, handle_message/2]).
 
 -spec join(node()) -> ok | {error, term()}.
 join(Node) ->
@@ -56,29 +53,19 @@ cluster_nodes() ->
 -spec(start_link() ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link() ->
-  gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+  pes_gen_process:start_link(?MODULE).
 
--spec init(Args :: term()) -> {ok, State :: term()}.
-init(_) ->
+-spec init() -> {ok, State :: term()}.
+init() ->
   simple_gossip:subscribe(self(), rumor),
   persistent_term:put(?NODES_KEY, cluster_nodes()),
   ok = net_kernel:monitor_nodes(true),
-  {ok, #state{}}.
+  {ok, no_state}.
 
--spec handle_call(Request :: term(), From :: {pid(), Tag :: term()}, State :: term()) ->
-  no_return().
-handle_call(_Request, _From, _State) ->
-  erlang:error(not_implemented).
 
--spec handle_cast(Request :: term(), State :: term()) -> no_return().
-handle_cast(_Request, _State) ->
-  erlang:error(not_implemented).
-
--spec handle_info(Info :: timeout | term(), State :: term()) ->
-  {noreply, NewState :: term()} |
-  {noreply, NewState :: term(), timeout() | hibernate | {continue, term()}} |
-  {stop, Reason :: term(), NewState :: term()}.
-handle_info({rumor_changed, Rumor}, State) ->
+-spec handle_message(Info :: term(), State :: term()) ->
+  {ok, State :: term()}.
+handle_message({rumor_changed, Rumor}, State) ->
   Nodes = lists:usort(simple_gossip_rumor:nodes(Rumor)),
   CurrentNodes = lists:usort(nodes()),
   case CurrentNodes =:= Nodes of
@@ -90,8 +77,8 @@ handle_info({rumor_changed, Rumor}, State) ->
                       persistent_term:erase(?DEAD_NODES_KEY(Node))
                     end, CurrentNodes -- Nodes)
   end,
-  {noreply, State};
-handle_info({nodeup, Node}, State) ->
+  {ok, State};
+handle_message({nodeup, Node}, State) ->
   case lists:member(Node, nodes()) of
     true ->
       persistent_term:erase(?DEAD_NODES_KEY(Node)),
@@ -100,9 +87,9 @@ handle_info({nodeup, Node}, State) ->
     _ ->
       ok
   end,
-  {noreply, State};
+  {ok, State};
 
-handle_info({nodedown, Node}, State) ->
+handle_message({nodedown, Node}, State) ->
   case lists:member(Node, nodes()) of
     true ->
       persistent_term:put(?DEAD_NODES_KEY(Node), true),
@@ -110,4 +97,4 @@ handle_info({nodedown, Node}, State) ->
     _ ->
       ok
   end,
-  {noreply, State}.
+  {ok, State}.

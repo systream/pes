@@ -65,6 +65,7 @@ all() ->
     cfg_set,
     clean,
     stat,
+    pes_server_state,
     {group, cluster_group}
   ].
 
@@ -278,14 +279,20 @@ stat(_Config) ->
   ] = pes:stat(),
   ?assert(ActiveRegistrarCount2 > ActiveRegistrarCount).
 
+pes_server_state(_Config) ->
+  % for cover
+  [Server1 | _] = pes_server_sup:servers(),
+  _ = sys:get_state(Server1).
+
 cluster_group({setup, Config}) ->
   {ok, Node1} = pes_test_cluster:start_node(node_1),
   {ok, Node2} = pes_test_cluster:start_node(node_2),
-  ok = pes_cluster:join(Node1),
-  ok = pes_cluster:join(Node2),
+  ok = pes:join(Node1),
+  ok = pes:join(Node2),
   [{nodes, [Node1, Node2]} | Config];
 cluster_group({tear_down, Config}) ->
-  Nodes = proplists:get_value(nodes, Config),
+  [Node1  | _] = Nodes = proplists:get_value(nodes, Config),
+  pes:leave(Node1),
   [pes_test_cluster:stop_node(Node) || Node <- Nodes].
 
 register_no_majority(Config) ->

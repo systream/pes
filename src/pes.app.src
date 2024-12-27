@@ -1,5 +1,5 @@
 {application, pes,
- [{description, "Process Selection Service"},
+ [{description, "Process Election Service"},
   {vsn, git},
   {registered, []},
   {mod, {pes_app, []}},
