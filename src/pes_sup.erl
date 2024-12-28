@@ -10,7 +10,7 @@
 -export([init/1]).
 
 -define(SERVER, ?MODULE).
--define(DEFAULT_SHARD_COUNT, 8).
+-define(DEFAULT_SHARD_COUNT, 16).
 
 -spec start_link() -> {'ok', pid()} | 'ignore' | {'error', term()}.
 start_link() ->

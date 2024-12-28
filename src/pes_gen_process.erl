@@ -12,8 +12,9 @@
   sub_state :: term()
 }).
 
--type state() :: #state{}.
+-opaque state() :: #state{}.
 
+-export_type([state/0]).
 
 -callback init() -> State :: term().
 -callback handle_message(Message :: term(), State :: term()) ->

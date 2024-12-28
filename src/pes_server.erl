@@ -101,7 +101,7 @@ loop(State) ->
       schedule_cleanup(),
       ?MODULE:loop(State);
     {system, From, Request} ->
-      [Parent|_] = get('$ancestors'),
+      [Parent | _] = get('$ancestors'),
       sys:handle_system_msg(Request, From, Parent, ?MODULE, [], undefined)
   end.
 

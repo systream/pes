@@ -10,7 +10,7 @@
 
 -define(KEY(K), {?MODULE, K}).
 
--behavior(pes_gen_process).
+-behaviour(pes_gen_process).
 
 %% API
 -export([start_link/0, init/0, handle_message/2]).

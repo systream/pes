@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 -module(pes_cluster).
 
--behavior(pes_gen_process).
+-behaviour(pes_gen_process).
 -compile({no_auto_import, [nodes/0]}).
 
 -define(NODES_KEY, {?MODULE, nodes}).
