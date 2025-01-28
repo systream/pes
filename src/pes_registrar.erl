@@ -19,7 +19,7 @@
 -define(TRACE(Msg, Args, Id), ok).
 
 %% API
--export([register/2, unregister/1]).
+-export([register/2, unregister/1, register/3]).
 
 %% gen_statem callbacks
 -export([init/1, handle_event/4, callback_mode/0, terminate/3]).
@@ -69,8 +69,8 @@ do_register(Id, Value, Timeout) ->
     {'DOWN', Ref, process, ServerPid, Reason} ->
       {error, Reason}
   after Timeout ->
-    exit(ServerPid, kill),
     erlang:demonitor(Ref, [flush]),
+    ok = gen_statem:stop(ServerPid),
     {error, timeout}
   end.
 
@@ -209,7 +209,7 @@ handle_event(info, #promise_reply{} = Reply, _StateName, _State) ->
   %?trace("[~p] reply dropped ~p", [StateName, Reply], State#state.id),
   keep_state_and_data.
 
--spec  terminate(Reason :: 'normal' | 'shutdown' | {'shutdown', term()} | term(),
+-spec terminate(Reason :: 'normal' | 'shutdown' | {'shutdown', term()} | term(),
                  State :: state(),
                  Data :: term()) ->
   ok.
