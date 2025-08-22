@@ -19,7 +19,7 @@
 -define(TRACE(Msg, Args, Id), ok).
 
 %% API
--export([register/2, unregister/1, register/3]).
+-export([register/2, register/3, update/2, unregister/1]).
 
 %% gen_statem callbacks
 -export([init/1, handle_event/4, callback_mode/0, terminate/3]).
@@ -29,7 +29,7 @@
   pid :: pid(),
   nodes :: [node()],
   majority :: pos_integer(),
-  caller :: pid(),
+  caller :: pid() | {pid(), gen_statem:reply_tag()},
   term = 1 :: pos_integer(),
   last_timestamp = 1 :: pos_integer(),
   promises = [] :: [{promise, reference()}],
@@ -73,6 +73,10 @@ do_register(Id, Value, Timeout) ->
     ok = gen_statem:stop(ServerPid),
     {error, timeout}
   end.
+
+-spec update(pid(), pid()) -> registered | {error, {could_not_register, Reason :: term()} | timeout | term()}.
+update(Server, NewPid) ->
+  gen_statem:call(Server, {update, NewPid}).
 
 -spec unregister(pid()) -> ok.
 unregister(Server) ->
@@ -207,7 +211,16 @@ handle_event(info, {'DOWN', Ref, process, _Pid, Reason}, monitoring, State) ->
 handle_event(info, #promise_reply{} = Reply, _StateName, _State) ->
   pes_promise:resolved(Reply),
   %?trace("[~p] reply dropped ~p", [StateName, Reply], State#state.id),
-  keep_state_and_data.
+  keep_state_and_data;
+
+% we need to update the guarded pid
+% @TODO unfortunately if the registration not succeed that the old reg could not be restored
+handle_event({call, From}, {update, NewPid}, _StateName, State) ->
+  % the thing is that we do not know the monitor ref for the target pid
+  % but luckily we don't need to demonitor the old pid.
+  % If it goes down and the pid is not matched in the state basically we just ignores it.
+  erlang:monitor(process, NewPid),
+  {next_state, commit, State#state{pid = NewPid, caller = From}}.
 
 -spec terminate(Reason :: 'normal' | 'shutdown' | {'shutdown', term()} | term(),
                  State :: state(),
@@ -379,6 +392,8 @@ repair(Node, Id, OldTerm, NewTerm, Value) ->
 encapsulate_term(Term) ->
   {Term, self()}.
 
+reply(#state{caller = {_Pid, _ReplyTag} = From}, Response) ->
+  gen_statem:reply(From, Response);
 reply(#state{caller = Caller}, Response) ->
   erlang:send(Caller, {'$reply', self(), Response}, [nosuspend, noconnect]).
 

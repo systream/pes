@@ -76,11 +76,12 @@ initial_state(#{nodes := Nodes}) ->
   #{nodes => Nodes, processes => #{}, islands => []}.
 
 %% @doc List of possible commands to run against the system
-command(#{nodes := Nodes} = State) ->
+command(#{nodes := Nodes} = _State) ->
     frequency([
       {90, {call, rpc, call, [oneof(Nodes), pes, register_name, [key(), process()]]}},
       {40, {call, rpc, call, [oneof(Nodes), pes, unregister_name, [key()]]}},
-      {80, {call, rpc, call, [oneof(Nodes), pes, whereis_name, [key()]]}}%,
+      {80, {call, rpc, call, [oneof(Nodes), pes, whereis_name, [key()]]}},
+      {10, {call, rpc, call, [oneof(Nodes), pes, update, [key(), process()]]}}%,
       %{26, {call, ?MODULE, fix_connections, [State]}},
       %{1, {call, ?MODULE, cut_connections, [islands(Nodes)]}}
     ]).

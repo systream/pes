@@ -36,6 +36,21 @@ monitoring the started process.
 It is also responsible update/heartbeat the registry periodically.
 
 
+# Handoff process
+It is possible to update the process id in PES's catalog.
+But pls keep it in ming that it is tou responsibility to design you own handoff method. 
+
+Here is some example: 
+```erlang
+  NewMerlinServer = gen_server:start(wizard_mod, [], []),
+  MerlinPid = pes:whereis_name(<<"merlin">>),
+  gen_server:call(MerlinPid, {handoff, NewMerlinServer}),
+
+  pes:update(<<"merlin">>, NewMerlinServer),
+
+  gen_server:terminate(MerlinPid).
+```
+
 Build
 -----
 

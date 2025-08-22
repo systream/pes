@@ -61,6 +61,8 @@ all() ->
     send_undefined,
     send_ok,
     unregister_undefined,
+    update_undefined,
+    update_ok,
     repair,
     cfg_set,
     clean,
@@ -204,6 +206,22 @@ send_ok(_Config) ->
 
 unregister_undefined(_Config) ->
   ?assertEqual(ok, pes:unregister_name(not_registered)).
+
+update_undefined(_Config) ->
+  Id = <<"up_reg100_nf">>,
+  TestPid = ?TEST_PROCESS(1000),
+  ?assertEqual({error, not_found}, pes:update(Id, TestPid)).
+
+update_ok(_Config) ->
+  TestPidA = ?TEST_PROCESS(1000),
+  TestPidB = ?TEST_PROCESS(1000),
+  Id = <<"up_reg100">>,
+  ?assertEqual(yes, pes:register_name(Id, TestPidA)),
+  ?assertEqual(TestPidA, pes:whereis_name(Id)),
+  ?assertEqual(ok, pes:update(Id, TestPidB)),
+  ?assertEqual(TestPidB, pes:whereis_name(Id)),
+  ?assertEqual(ok, pes:unregister_name(Id)),
+  ?assertEqual(undefined, pes:whereis_name(Id)).
 
 repair(_Config) ->
   Id = repair_test,

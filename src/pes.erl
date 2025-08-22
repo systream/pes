@@ -13,8 +13,9 @@
 -define(DEFAULT_RETRY_COUNT, 3).
 
 %% API
--export([register_name/2, unregister_name/1, whereis_name/1, send/2,
-  join/1, leave/1, stat/0]).
+-export([register_name/2, unregister_name/1, whereis_name/1, update/2,
+         send/2,
+         join/1, leave/1, stat/0]).
 
 -spec register_name(Name, Pid) -> 'yes' | 'no' when
   Name :: term(),
@@ -132,6 +133,24 @@ send(Name, Msg) ->
       Pid;
     undefined ->
       exit({badarg, {Name, Msg}})
+  end.
+
+-spec update(term(), pid()) -> ok | {error, term()}.
+update(Name, NewPid) when is_pid(NewPid) ->
+  case lookup(Name) of
+    {ok, {Pid, _GuardPid}} when Pid =:= NewPid ->
+      ok;
+    {ok, {Pid, GuardPid}} ->
+      case pes_registrar:update(GuardPid, NewPid) of
+        registered ->
+          ok;
+        Else ->
+          Else
+      end;
+    undefined ->
+      {error, not_found};
+    Else ->
+      Else
   end.
 
 -spec join(node()) -> ok | {error, term()}.
