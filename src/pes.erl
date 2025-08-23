@@ -17,6 +17,10 @@
          send/2,
          join/1, leave/1, stat/0]).
 
+-ifdef(TEST).
+-export([lookup/1]).
+-endif.
+
 -spec register_name(Name, Pid) -> 'yes' | 'no' when
   Name :: term(),
   Pid :: pid().
@@ -140,7 +144,7 @@ update(Name, NewPid) when is_pid(NewPid) ->
   case lookup(Name) of
     {ok, {Pid, _GuardPid}} when Pid =:= NewPid ->
       ok;
-    {ok, {Pid, GuardPid}} ->
+    {ok, {_Pid, GuardPid}} ->
       case pes_registrar:update(GuardPid, NewPid) of
         registered ->
           ok;

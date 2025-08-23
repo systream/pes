@@ -12,6 +12,7 @@
 -include_lib("pes_promise.hrl").
 
 -define(DEFAULT_TIMEOUT, 5000).
+-define(HANDOFF_TIMEOUT, 5000).
 
 %-define(trace(Msg, Args), io:format(user, Msg ++ "~n", Args)).
 %-define(TRACE(Msg, Args, Id), logger:warning(Msg, Args, #{node => node(), cid => Id,
@@ -86,7 +87,8 @@ unregister(Server) ->
 %%% gen_statem callbacks
 %%%===================================================================
 
--spec init({term(), pid(), pid()}) -> {ok, reg_check, state()}.
+-spec init({term(), pid(), pid()} | {handoff, term(), state()}) ->
+  {ok, reg_check | term(), state()}.
 init({Id, Pid, Caller}) ->
   %?trace("Staring FSM for ~p ", [Pid], Id),
   erlang:process_flag(trap_exit, true),
@@ -94,7 +96,9 @@ init({Id, Pid, Caller}) ->
   Nodes = pes_cluster:nodes(),
   Majority = majority(Nodes),
   ok = pes_stat:increase([registrar, active]),
-  {ok, reg_check, #state{id = Id, caller = Caller, pid = Pid, nodes = Nodes, majority = Majority}}.
+  {ok, reg_check, #state{id = Id, caller = Caller, pid = Pid, nodes = Nodes, majority = Majority}};
+init({handoff, State}) ->
+  {ok, handoff, State}.
 
 -spec callback_mode() -> [handle_event_function | state_enter].
 callback_mode() ->
@@ -196,7 +200,7 @@ handle_event(info, #promise_reply{result = {nack, {Server, OldTerm}}} = Reply, m
 
   % if the repair was success than we convert the nack to an ack,
   % to handle the situation when too many knew nodes added
-  NewResult = case repair(Server, Id, OldTerm, Term, {Pid, self(), Now}) of
+  NewResult = case pes_promise:await(repair(Server, Id, OldTerm, Term, {Pid, self(), Now})) of
                 ack -> ack;
                 _ -> nack
               end,
@@ -213,14 +217,39 @@ handle_event(info, #promise_reply{} = Reply, _StateName, _State) ->
   %?trace("[~p] reply dropped ~p", [StateName, Reply], State#state.id),
   keep_state_and_data;
 
+% handoff
+handle_event(enter, _, handoff, #state{}) ->
+  {keep_state_and_data, [{state_timeout, ?HANDOFF_TIMEOUT, handoff_timeout}]};
+handle_event({call, From}, {handoff_ready, StateName}, handoff, #state{} = State) ->
+  {next_state, StateName, State, [{reply, From, ok}]};
+handle_event(state_timeout, handoff_timeout, handoff, #state{} = State) ->
+  {stop, handoff_timeout, State};
+handle_event(_EventType, _EventContext, handoff, _State) ->
+  % queue all the stuff until handoff is not ready
+  {keep_state_and_data, [postpone]};
+
 % we need to update the guarded pid
 % @TODO unfortunately if the registration not succeed that the old reg could not be restored
-handle_event({call, From}, {update, NewPid}, _StateName, State) ->
+handle_event({call, From}, {update, NewPid}, _StateName, State) when node(NewPid) =:= node() ->
   % the thing is that we do not know the monitor ref for the target pid
   % but luckily we don't need to demonitor the old pid.
   % If it goes down and the pid is not matched in the state basically we just ignores it.
   erlang:monitor(process, NewPid),
-  {next_state, commit, State#state{pid = NewPid, caller = From}}.
+  {next_state, commit, State#state{pid = NewPid, caller = From}};
+handle_event({call, From}, {update, NewPid}, StateName,
+              #state{id = Id, term = Term} = State) ->
+  % things gets complicated we need too transfer the guard process to the target node
+  Now = pes_time:now(),
+  Nodes = pes_cluster:nodes(),
+  NewState = set_nodes(increase_term(State#state{pid = NewPid, caller = From, last_timestamp = Now}), Nodes),
+  TargetNode = node(NewPid),
+  {ok, NewGuard} = rpc:call(TargetNode, gen_statem, start, [?MODULE, {handoff, NewState}, []]),
+  CurrentTerm = encapsulate_term(Term),
+  Promises = [repair(Server, Id, CurrentTerm, NewState#state.term, {NewPid, NewGuard, Now}) || Server <- Nodes],
+  lists:foreach(fun pes_promise:await/1, Promises),
+  ok = gen_statem:call(NewGuard, {handoff_ready, StateName}),
+  gen_statem:reply(From, registered),
+  {stop, normal, NewState}.
 
 -spec terminate(Reason :: 'normal' | 'shutdown' | {'shutdown', term()} | term(),
                  State :: state(),
@@ -309,7 +338,6 @@ handle_consensus_responses(Ref, Reply, State, NextState) ->
       {next_state, reg_check, NewState}
   end.
 
-
 handle_update_responses(Ref, Reply, State) ->
   %?trace("Handle update ~p -> ~p", [Ref, Reply], State#state.id),
   case evaluate_response(Ref, Reply, State) of
@@ -387,7 +415,7 @@ commit(Node, Id, Term, Value) ->
   pes_server_sup:commit(Node, Id, encapsulate_term(Term), Value).
 
 repair(Node, Id, OldTerm, NewTerm, Value) ->
-  pes_promise:await(pes_server_sup:repair(Node, Id, OldTerm, encapsulate_term(NewTerm), Value)).
+  pes_server_sup:repair(Node, Id, OldTerm, encapsulate_term(NewTerm), Value).
 
 encapsulate_term(Term) ->
   {Term, self()}.

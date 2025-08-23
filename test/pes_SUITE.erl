@@ -10,6 +10,7 @@
 %%--------------------------------------------------------------------
 
 -define(TEST_PROCESS(TTL), spawn(fun() -> timer:sleep(TTL) end)).
+-define(TEST_PROCESS(Node, TTL), rpc:call(Node, erlang, spawn, [fun() -> timer:sleep(TTL) end])).
 -define(TEST_HEARTBEAT_TIMEOUT, 500).
 
 suite() ->
@@ -43,7 +44,8 @@ groups() ->
       register_no_majority,
       register_one_node_not_up_to_date,
       register_previous_record_expired,
-      register_previous_record_expired_but_alive
+      register_previous_record_expired_but_alive,
+      reallocate_guard_process
     ]
   }].
 
@@ -213,12 +215,17 @@ update_undefined(_Config) ->
   ?assertEqual({error, not_found}, pes:update(Id, TestPid)).
 
 update_ok(_Config) ->
-  TestPidA = ?TEST_PROCESS(1000),
-  TestPidB = ?TEST_PROCESS(1000),
+  TestPidA = ?TEST_PROCESS(150),
+  TestPidB = ?TEST_PROCESS(250),
   Id = <<"up_reg100">>,
   ?assertEqual(yes, pes:register_name(Id, TestPidA)),
   ?assertEqual(TestPidA, pes:whereis_name(Id)),
+  % same pid test
+  ?assertEqual(ok, pes:update(Id, TestPidA)),
+
   ?assertEqual(ok, pes:update(Id, TestPidB)),
+  ?assertEqual(TestPidB, pes:whereis_name(Id)),
+  ct:sleep(150), % wait until the process A dies
   ?assertEqual(TestPidB, pes:whereis_name(Id)),
   ?assertEqual(ok, pes:unregister_name(Id)),
   ?assertEqual(undefined, pes:whereis_name(Id)).
@@ -392,6 +399,26 @@ register_previous_record_expired_but_alive(Config) ->
 
   ?assertEqual(undefined, pes:whereis_name(Id)),
   ?assertEqual(no, pes:register_name(Id, ActualProc)),
+  ok.
+
+reallocate_guard_process(Config) ->
+  [NodeA, _] = proplists:get_value(nodes, Config),
+  Id = <<"reallocate_id">>,
+  TestPidA = ?TEST_PROCESS(1000),
+
+  ?assertEqual(yes, pes:register_name(Id, TestPidA)),
+  ?assertEqual(TestPidA, pes:whereis_name(Id)),
+  {ok, {_, GuardPidA}} = pes:lookup(Id),
+  ?assertEqual(node(), node(GuardPidA)),
+
+  TestPidB = ?TEST_PROCESS(NodeA, 1000),
+  ok = pes:update(Id, TestPidB),
+  ?assertEqual(TestPidB, pes:whereis_name(Id)),
+
+  {ok, {_, GuardPidB}} = pes:lookup(Id),
+  ?assertEqual(NodeA, node(GuardPidB)),
+
+
   ok.
 
 pes_call(Function, Args) ->
