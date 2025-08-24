@@ -33,7 +33,13 @@ load(KeySpace, ProcessMaxAliveTime, EndTime, Rate) ->
     true ->
       ok;
     _ ->
-      gen_server:start({via, pes, 100000 + rand:uniform(KeySpace)}, ?MODULE, ProcessMaxAliveTime, []),
+      Key = 100000 + rand:uniform(KeySpace),
+      gen_server:start({via, pes, Key}, ?MODULE, ProcessMaxAliveTime, []),
+      spawn(fun() ->
+              timer:sleep(ProcessMaxAliveTime div 2),
+              [N | _] = nodes(),
+              pes:update(Key, rpc:call(N, erlang, spawn, [fun() -> timer:sleep(rand:uniform(ProcessMaxAliveTime div 2)) end]))
+            end),
       timer:sleep(rand:uniform(Rate)),
       load(KeySpace, ProcessMaxAliveTime, EndTime, Rate)
   end.

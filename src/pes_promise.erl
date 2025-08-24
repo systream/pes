@@ -28,7 +28,7 @@ async(Target, Command) ->
 -spec await(promise()) -> term() | {error, term()}.
 await({promise, Ref}) ->
   receive
-    #promise_reply{result = Result} = Reply ->
+    #promise_reply{result = Result, ref = Ref} = Reply ->
       resolved(Reply),
       Result;
     {'DOWN', Ref, process, _Pid, Reason} ->

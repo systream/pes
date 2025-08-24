@@ -32,7 +32,7 @@
   majority :: pos_integer(),
   caller :: pid() | {pid(), gen_statem:reply_tag()},
   term = 1 :: pos_integer(),
-  last_timestamp = 1 :: pos_integer(),
+  last_timestamp = pes_time:now() :: pos_integer(),
   promises = [] :: [{promise, reference()}],
   replies = #{} :: #{}
 }).
@@ -98,6 +98,8 @@ init({Id, Pid, Caller}) ->
   ok = pes_stat:increase([registrar, active]),
   {ok, reg_check, #state{id = Id, caller = Caller, pid = Pid, nodes = Nodes, majority = Majority}};
 init({handoff, State}) ->
+  erlang:process_flag(trap_exit, true),
+  ok = pes_stat:increase([registrar, active]),
   {ok, handoff, State}.
 
 -spec callback_mode() -> [handle_event_function | state_enter].
@@ -152,8 +154,9 @@ handle_event(info, {'DOWN', Ref, process, _Pid, Reason}, prepare, State) ->
 % commit
 handle_event(enter, _, commit, #state{id = Id, nodes = Nodes, term = Term, pid = Pid} = State) ->
   %?trace("Entered commit", [], Id),
-  Data = {Pid, self(), pes_time:now()},
-  {keep_state, set_promises([commit(Node, Id, Term, Data) || Node <- Nodes], State)};
+  Now = pes_time:now(),
+  Data = {Pid, self(), Now},
+  {keep_state, set_promises([commit(Node, Id, Term, Data) || Node <- Nodes], State#state{last_timestamp = Now})};
 handle_event(info, #promise_reply{ref = Ref, result = Response} = Reply, commit, State) ->
   pes_promise:resolved(Reply),
   handle_consensus_responses(Ref, Response, State, registered);
@@ -220,7 +223,8 @@ handle_event(info, #promise_reply{} = Reply, _StateName, _State) ->
 % handoff
 handle_event(enter, _, handoff, #state{}) ->
   {keep_state_and_data, [{state_timeout, ?HANDOFF_TIMEOUT, handoff_timeout}]};
-handle_event({call, From}, {handoff_ready, StateName}, handoff, #state{} = State) ->
+handle_event({call, From}, {handoff_ready, StateName}, handoff, #state{pid = Pid} = State) ->
+  erlang:monitor(process, Pid),
   {next_state, StateName, State, [{reply, From, ok}]};
 handle_event(state_timeout, handoff_timeout, handoff, #state{} = State) ->
   {stop, handoff_timeout, State};

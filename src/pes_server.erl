@@ -141,23 +141,13 @@ handle_command({commit, Id, {Term, Server}, Value}, #state{data_storage_ref = DS
 % Commit can reply with nack and the actual term, and server data.
 % To ensure in the mean time no other registration attempt were made,
 % we need to send back those values.
-handle_command({repair, Id, Term, {NewTermId, _} = NewTerm, Value},
+handle_command({repair, Id, _Term, {NewTermId, _} = NewTerm, Value},
                 #state{data_storage_ref = DSR,
                        term_storage_ref = TSR}) ->
   pes_stat:count([server, repair]),
-  Result = case ets:lookup(TSR, Id) of
-             [{Id, StoredTerm}] when StoredTerm =:= Term -> ack; % the term matches
-             [] when Term =:= not_found -> ack;
-             _E -> nack
-           end,
-  case Result of
-    ack ->
-      true = ets:insert(TSR, {Id, NewTerm}),
-      true = ets:insert(DSR, {Id, {NewTermId, Value}, pes_time:now()});
-    nack ->
-      ok
-  end,
-  Result.
+  true = ets:insert(TSR, {Id, NewTerm}),
+  true = ets:insert(DSR, {Id, {NewTermId, Value}, pes_time:now()}),
+  ack.
 
 system_continue(_Parent, _Deb, State) ->
   ?MODULE:loop(State).
