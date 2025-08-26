@@ -27,7 +27,7 @@
 -export([system_continue/3, system_terminate/4, system_get_state/1, system_code_change/4]).
 
 -define(DEFAULT_CLEANUP_TIMEOUT, 5001).
--define(DEFAULT_DELETE_LIMIT, 250).
+-define(DEFAULT_DELETE_LIMIT, 100).
 -define(DEFAULT_DELETE_THRESHOLD, 200000).
 
 -define(TERM_STORAGE, pes_term_storage).
@@ -92,17 +92,20 @@ init(Server) ->
 -spec loop(state()) -> no_return().
 loop(State) ->
   receive
-    #pes_promise_call{from = From, command = Command} ->
-      pes_promise:reply(From, handle_command(Command, State)),
-      pes_stat:count([server, request_count]),
-      ?MODULE:loop(State);
-    cleanup ->
-      clean_expired_data(State),
-      schedule_cleanup(),
-      ?MODULE:loop(State);
-    {system, From, Request} ->
-      [Parent | _] = get('$ancestors'),
-      sys:handle_system_msg(Request, From, Parent, ?MODULE, [], undefined)
+    Message ->
+      case Message of
+        #pes_promise_call{from = From, command = Command} ->
+          pes_promise:reply(From, handle_command(Command, State)),
+          pes_stat:count([server, request_count]),
+          ?MODULE:loop(State);
+        cleanup ->
+          clean_expired_data(State),
+          schedule_cleanup(),
+          ?MODULE:loop(State);
+        {system, From, Request} ->
+          [Parent | _] = get('$ancestors'),
+          sys:handle_system_msg(Request, From, Parent, ?MODULE, [], undefined)
+      end
   end.
 
 -spec handle_command(term(), state()) -> term().
@@ -115,7 +118,7 @@ handle_command({read, Id}, #state{data_storage_ref = DSR}) ->
   end;
 handle_command({prepare, Id, {Term, Server}}, #state{term_storage_ref = TSR}) ->
   case ets:lookup(TSR, Id) of
-    [{Id, {StoredTerm, _StoredServer}}] when StoredTerm >= Term ->
+    [{_Id, {StoredTerm, _StoredServer}}] when StoredTerm >= Term ->
       pes_stat:count([server, nack]),
       nack;
     _ -> % not found or StoredTerm is lower than this
@@ -126,12 +129,12 @@ handle_command({prepare, Id, {Term, Server}}, #state{term_storage_ref = TSR}) ->
 handle_command({commit, Id, {Term, Server}, Value}, #state{data_storage_ref = DSR,
                                                            term_storage_ref = TSR}) ->
   case ets:lookup(TSR, Id) of
-    [{Id, {StoredTerm, StoredServer}}] when StoredTerm =:= Term andalso StoredServer =:= Server ->
+    [{_Id, {StoredTerm, StoredServer}}] when StoredTerm =:= Term andalso StoredServer =:= Server ->
       Now = pes_time:now(),
       true = ets:insert(DSR, {Id, {Term, Value}, Now}),
       pes_stat:count([server, ack]),
       ack;
-    [{Id, {StoredTerm, StoredServer}}] ->
+    [{_Id, {StoredTerm, StoredServer}}] ->
       pes_stat:count([server, nack]),
       {nack, {node(), {StoredTerm, StoredServer}}};
     [] ->
@@ -179,7 +182,7 @@ clean_expired_data(#state{data_storage_ref = DSR, term_storage_ref = TSR}) ->
                       % Term data can not be deleted when
                       % We are in the middle of a process registration
                       case ets:lookup(TSR, Id) of
-                        [{Id, {TermId, _}}] -> ets:delete(TSR, Id);
+                        [{_Id, {TermId, _}}] -> ets:delete(TSR, Id);
                         _ -> ok
                       end
                     end, List)
@@ -188,5 +191,5 @@ clean_expired_data(#state{data_storage_ref = DSR, term_storage_ref = TSR}) ->
 -spec schedule_cleanup() -> ok.
 schedule_cleanup() ->
   RescheduleTime = pes_cfg:get(cleanup_period_time, ?DEFAULT_CLEANUP_TIMEOUT),
-  erlang:send_after(RescheduleTime + rand:uniform(100), self(), cleanup),
+  erlang:send_after(RescheduleTime + rand:uniform(250), self(), cleanup),
   ok.

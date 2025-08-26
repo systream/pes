@@ -17,7 +17,7 @@
 -export_type([promise/0]).
 
 %% API
--export([async/2, await/1, reply/2, resolved/1]).
+-export([async/2, await/1, await/2, reply/2, resolved/1]).
 
 -spec async({module(), node()}, term()) -> promise().
 async(Target, Command) ->
@@ -26,13 +26,20 @@ async(Target, Command) ->
   {promise, Ref}.
 
 -spec await(promise()) -> term() | {error, term()}.
-await({promise, Ref}) ->
+await(Promise) ->
+  await(Promise, infinity).
+
+-spec await(promise(), Timeout :: pos_integer() | infinity) ->
+  term() | {error, timeout | term()}.
+await({promise, Ref}, Timeout) ->
   receive
     #promise_reply{result = Result, ref = Ref} = Reply ->
       resolved(Reply),
       Result;
     {'DOWN', Ref, process, _Pid, Reason} ->
       {error, Reason}
+  after Timeout ->
+    {error, timeout}
   end.
 
 -spec resolved(promise() | pes_promise_reply()) -> ok.

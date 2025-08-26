@@ -75,7 +75,8 @@ do_register(Id, Value, Timeout) ->
     {error, timeout}
   end.
 
--spec update(pid(), pid()) -> registered | {error, {could_not_register, Reason :: term()} | timeout | term()}.
+-spec update(pid(), pid()) ->
+  registered | {error, {could_not_register, Reason :: term()} | timeout | term()}.
 update(Server, NewPid) ->
   gen_statem:call(Server, {update, NewPid}).
 
@@ -156,7 +157,9 @@ handle_event(enter, _, commit, #state{id = Id, nodes = Nodes, term = Term, pid =
   %?trace("Entered commit", [], Id),
   Now = pes_time:now(),
   Data = {Pid, self(), Now},
-  {keep_state, set_promises([commit(Node, Id, Term, Data) || Node <- Nodes], State#state{last_timestamp = Now})};
+  {keep_state,
+    set_promises([commit(Node, Id, Term, Data) || Node <- Nodes],
+                 State#state{last_timestamp = Now})};
 handle_event(info, #promise_reply{ref = Ref, result = Response} = Reply, commit, State) ->
   pes_promise:resolved(Reply),
   handle_consensus_responses(Ref, Response, State, registered);
@@ -245,12 +248,16 @@ handle_event({call, From}, {update, NewPid}, StateName,
   % things gets complicated we need too transfer the guard process to the target node
   Now = pes_time:now(),
   Nodes = pes_cluster:nodes(),
-  NewState = set_nodes(increase_term(State#state{pid = NewPid, caller = From, last_timestamp = Now}), Nodes),
+  NewState = set_nodes(
+    increase_term(State#state{pid = NewPid, caller = From, last_timestamp = Now}),
+    Nodes
+  ),
   TargetNode = node(NewPid),
   {ok, NewGuard} = rpc:call(TargetNode, gen_statem, start, [?MODULE, {handoff, NewState}, []]),
   CurrentTerm = encapsulate_term(Term),
-  Promises = [repair(Server, Id, CurrentTerm, NewState#state.term, {NewPid, NewGuard, Now}) || Server <- Nodes],
-  lists:foreach(fun pes_promise:await/1, Promises),
+  NewValue = {NewPid, NewGuard, Now},
+  Promises = [repair(Server, Id, CurrentTerm, NewState#state.term, NewValue) || Server <- Nodes],
+  lists:foreach(fun(Promise) -> pes_promise:await(Promise, ?DEFAULT_TIMEOUT) end, Promises),
   ok = gen_statem:call(NewGuard, {handoff_ready, StateName}),
   gen_statem:reply(From, registered),
   {stop, normal, NewState}.

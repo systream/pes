@@ -70,28 +70,30 @@ lookup(Name, Retry) ->
   undefined | {ok, {Pid :: pid(), GuardPid :: pid()}} | {error, timeout | no_consensus}.
 lookup(Name, Retry, Timeout) ->
   Parent = self(),
+  Ref = make_ref(),
   Gatherer = spawn_link(fun() ->
     StartTime = erlang:system_time(microsecond),
     Nodes = pes_cluster:nodes(),
     Majority = (length(Nodes) div 2) + 1,
     Promises = [pes_server_sup:read(Node, Name) || Node <- Nodes],
     Response = wait_for_responses(Majority, Promises, #{}),
-    erlang:send(Parent, {'$reply', self(), Response}),
+    erlang:send(Parent, {'$reply', Ref, Response}),
     pes_stat:update([lookup, response_time], erlang:system_time(microsecond) - StartTime)
   end),
   receive
-    {'$reply', Gatherer, {ok, _Term, {Pid, GuardPid}}} ->
+    {'$reply', Ref, {ok, _Term, {Pid, GuardPid}}} ->
       {ok, {Pid, GuardPid}};
-    {'$reply', Gatherer, {ok, _Term, undefined}} ->
+    {'$reply', Ref, {ok, _Term, undefined}} ->
       undefined;
-    {'$reply', Gatherer, not_found} ->
+    {'$reply', Ref, not_found} ->
       undefined;
-    {'$reply', Gatherer, {error, no_consensus}} when Retry > 0 ->
+    {'$reply', Ref, {error, no_consensus}} when Retry > 0 ->
       timer:sleep(2 + rand:uniform(8)),
       lookup(Name, Retry - 1);
-    {'$reply', Gatherer, {error, no_consensus}} ->
+    {'$reply', Ref, {error, no_consensus}} ->
       {error, no_consensus}
   after Timeout ->
+    erlang:demonitor(Ref, [flush]),
     exit(Gatherer, kill),
     {error, timeout}
   end.
