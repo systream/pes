@@ -21,8 +21,8 @@
 
 -spec async({module(), node()}, term()) -> promise().
 async(Target, Command) ->
-  Ref = erlang:monitor(process, Target),
-  send(Target, #pes_promise_call{from = {self(), Ref}, command = Command}),
+  Ref = erlang:monitor(process, Target, [{alias, reply_demonitor}]),
+  send(Target, #pes_promise_call{from = Ref, command = Command}),
   {promise, Ref}.
 
 -spec await(promise()) -> term() | {error, term()}.
@@ -49,11 +49,11 @@ resolved({promise, Ref}) ->
   erlang:demonitor(Ref, [flush]),
   ok.
 
--spec reply({pid(), reference()}, term()) -> ok.
-reply({Caller, Ref} = _From, Response) ->
-  send(Caller, #promise_reply{ref = Ref, result = Response}).
+-spec reply(reference(), term()) -> ok.
+reply(AliasRef, Response) ->
+  send(AliasRef, #promise_reply{ref = AliasRef, result = Response}).
 
--spec send(pid() | {atom(), node()}, term()) -> ok.
+-spec send(pid() | {atom(), node()} | reference(), term()) -> ok.
 send(To, Msg) ->
   erlang:send(To, Msg, [nosuspend, noconnect]),
   ok.

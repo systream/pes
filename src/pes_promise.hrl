@@ -1,5 +1,5 @@
 -record(pes_promise_call, {
-  from :: {pid(), reference()},
+  from :: reference(),
   command :: term()
 }).
 
