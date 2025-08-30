@@ -81,8 +81,12 @@ handle_message({rumor_changed, Rumor}, State) ->
 handle_message({nodeup, Node}, State) ->
   case lists:member(Node, nodes()) of
     true ->
-      persistent_term:erase(?DEAD_NODES_KEY(Node)),
+      % @todo have a better solution
+      % Give some time to the remote node to start properly,
+      % so before adding back again wait a bit
+      timer:sleep(15000),
       logger:info("Cluster Member ~p become UP", [Node]),
+      persistent_term:erase(?DEAD_NODES_KEY(Node)),
       ok;
     _ ->
       ok
