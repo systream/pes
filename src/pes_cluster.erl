@@ -84,7 +84,7 @@ handle_message({nodeup, Node}, State) ->
       % @todo have a better solution
       % Give some time to the remote node to start properly,
       % so before adding back again wait a bit
-      timer:sleep(15000),
+      wait_until_app_started(Node, pes),
       logger:info("Cluster Member ~p become UP", [Node]),
       persistent_term:erase(?DEAD_NODES_KEY(Node)),
       ok;
@@ -102,3 +102,12 @@ handle_message({nodedown, Node}, State) ->
       ok
   end,
   {ok, State}.
+
+wait_until_app_started(OnNode, App) ->
+  case rpc:call(OnNode, application_controller, is_running, [App]) of
+    false ->
+      timer:sleep(100),
+      wait_until_app_started(OnNode, App);
+    _ ->
+      ok
+  end.
