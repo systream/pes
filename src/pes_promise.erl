@@ -17,7 +17,7 @@
 -export_type([promise/0]).
 
 %% API
--export([async/2, await/1, await/2, reply/2, resolved/1]).
+-export([async/2, await/1, await/2, reply/2, fake_reply/1, fake_reply/2, resolved/1]).
 
 -spec async({module(), node()}, term()) -> promise().
 async(Target, Command) ->
@@ -52,6 +52,16 @@ resolved({promise, Ref}) ->
 -spec reply(reference(), term()) -> ok.
 reply(AliasRef, Response) ->
   send(AliasRef, #promise_reply{ref = AliasRef, result = Response}).
+
+-spec fake_reply(term()) -> promise().
+fake_reply(Reply) ->
+  fake_reply(self(), Reply).
+
+-spec fake_reply(pid(), term()) -> promise().
+fake_reply(Pid, Reply) ->
+  Ref = make_ref(),
+  send(Pid, #promise_reply{ref = Ref, result = Reply}),
+  {promise, Ref}.
 
 -spec send(pid() | {atom(), node()} | reference(), term()) -> ok.
 send(To, Msg) ->

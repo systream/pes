@@ -57,6 +57,10 @@ commit(Node, Id, Term, Value) ->
   commit(Node, Id, {Term, self()}, Value).
 
 -spec read(target(), id()) -> pes_promise:promise().
+read({Server, Node}, Id) when Node =:= node() ->
+  Result = pes_promise:fake_reply(do_read(Server, Id)),
+  pes_stat:count([server, request_count]),
+  Result;
 read(Node, Id) ->
   async(Node, {read, Id}).
 
@@ -86,8 +90,8 @@ init(Server) ->
   true = erlang:register(Server, self()),
   proc_lib:init_ack({ok, self()}),
   schedule_cleanup(),
-  loop(#state{term_storage_ref = ets:new(?TERM_STORAGE, [protected, compressed]),
-              data_storage_ref = ets:new(?DATA_STORAGE, [protected, compressed])}).
+  loop(#state{term_storage_ref = ets:new(?TERM_STORAGE, [protected]),
+              data_storage_ref = ets:new(Server, [named_table, protected])}).
 
 -spec loop(state()) -> no_return().
 loop(State) ->
@@ -110,12 +114,7 @@ loop(State) ->
 
 -spec handle_command(term(), state()) -> term().
 handle_command({read, Id}, #state{data_storage_ref = DSR}) ->
-  case ets:lookup(DSR, Id) of
-    [{Id, {Term, Value}, _Ts}] ->
-      {ok, Term, Value};
-    _ ->
-      not_found
-  end;
+  do_read(DSR, Id);
 handle_command({prepare, Id, {Term, Server}}, #state{term_storage_ref = TSR}) ->
   case ets:lookup(TSR, Id) of
     [{_Id, {StoredTerm, _StoredServer}}] when StoredTerm >= Term ->
@@ -193,3 +192,13 @@ schedule_cleanup() ->
   RescheduleTime = pes_cfg:get(cleanup_period_time, ?DEFAULT_CLEANUP_TIMEOUT),
   erlang:send_after(RescheduleTime + rand:uniform(250), self(), cleanup),
   ok.
+
+-spec do_read(ets:tid(), term()) ->
+  {ok, consensus_term(), term()} | not_found.
+do_read(Ets, Id) ->
+  case ets:lookup(Ets, Id) of
+    [{Id, {Term, Value}, _Ts}] ->
+      {ok, Term, Value};
+    _ ->
+      not_found
+  end.

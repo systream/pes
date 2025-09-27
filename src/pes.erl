@@ -13,13 +13,9 @@
 -define(DEFAULT_RETRY_COUNT, 3).
 
 %% API
--export([register_name/2, unregister_name/1, whereis_name/1, update/2,
+-export([register_name/2, unregister_name/1, whereis_name/1, update/2, lookup/1,
          send/2,
          join/1, leave/1, stat/0]).
-
--ifdef(TEST).
--export([lookup/1]).
--endif.
 
 -spec register_name(Name, Pid) -> 'yes' | 'no' when
   Name :: term(),
@@ -87,8 +83,10 @@ lookup(Name, Retry, Timeout) ->
       undefined;
     {'$reply', Ref, not_found} ->
       undefined;
-    {'$reply', Ref, {error, no_consensus}} when Retry > 0 ->
-      timer:sleep(2 + rand:uniform(8)),
+    {'$reply', Ref, {error, no_consensus}} when Retry >= 0 ->
+      BaseSleep = application:get_env(pes, retry_sleep, 10),
+      RandSleep = application:get_env(pes, jitter_sleep, BaseSleep),
+      timer:sleep(BaseSleep + rand:uniform(RandSleep)),
       lookup(Name, Retry - 1);
     {'$reply', Ref, {error, no_consensus}} ->
       {error, no_consensus}
