@@ -418,6 +418,10 @@ reallocate_guard_process(Config) ->
   {ok, {_, GuardPidB}} = pes:lookup(Id),
   ?assertEqual(NodeA, node(GuardPidB)),
 
+  CNodes = [node() | proplists:get_value(nodes, Config)],
+
+  ?assertEqual(lists:sort(CNodes),
+               lists:sort(pes:nodes())),
 
   ok.
 
