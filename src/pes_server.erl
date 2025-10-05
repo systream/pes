@@ -172,8 +172,6 @@ clean_expired_data(#state{data_storage_ref = DSR, term_storage_ref = TSR}) ->
   DeleteLimit = pes_cfg:get(delete_limit, ?DEFAULT_DELETE_LIMIT),
   Select = ets:fun2ms(fun({Id, {TermId, _Value}, Ts}) when Ts < Threshold -> {Id, TermId} end),
   case ets:select(DSR, Select, DeleteLimit) of
-    '$end_of_table' ->
-      ok;
     {List, _Continuation} ->
       lists:foreach(fun({Id, TermId}) ->
                       % data can be deleted, because it has expired
@@ -184,7 +182,9 @@ clean_expired_data(#state{data_storage_ref = DSR, term_storage_ref = TSR}) ->
                         [{_Id, {TermId, _}}] -> ets:delete(TSR, Id);
                         _ -> ok
                       end
-                    end, List)
+                    end, List);
+    '$end_of_table' ->
+      ok
   end.
 
 -spec schedule_cleanup() -> ok.
