@@ -12,7 +12,7 @@
 -include_lib("pes_promise.hrl").
 
 -define(DEFAULT_TIMEOUT, 5000).
--define(HANDOFF_TIMEOUT, 5000).
+-define(HANDOFF_TIMEOUT, 15000).
 
 %-define(trace(Msg, Args), io:format(user, Msg ++ "~n", Args)).
 %-define(TRACE(Msg, Args, Id), logger:warning(Msg, Args, #{node => node(), cid => Id,
@@ -405,7 +405,7 @@ evaluate_response(Ref, Result, #state{replies = Replies,
   end.
 
 increase_term(#state{term = Term} = State) ->
-  State#state{term = Term+1}.
+  State#state{term = Term + 1}.
 
 set_promises(Promises, State) ->
   State#state{promises = Promises, replies = #{}}.
