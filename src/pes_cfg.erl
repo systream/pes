@@ -26,9 +26,10 @@ heartbeat() ->
 
 -spec get(term(), term()) -> term().
 get(Key, Default) ->
-  case simple_gossip:get(Key, {default, Default}) of
+  SGKey = {?MODULE, Key},
+  case simple_gossip:get(SGKey, {default, Default}) of
     {default, Default} ->
-      ok = simple_gossip:set(fun(Status) -> do_set_if_not_set(Key, Default, Status) end),
+      ok = simple_gossip:set(fun(Status) -> do_set_if_not_set(SGKey, Default, Status) end),
       Default;
     Result ->
       Result
@@ -36,7 +37,7 @@ get(Key, Default) ->
 
 -spec set(term(), term()) -> ok.
 set(Key, Value) ->
-  simple_gossip:set(Key, Value).
+  simple_gossip:set({?MODULE, Key}, Value).
 
 -spec do_set_if_not_set(term(), term(), undefined | map()) -> {change, map()} | no_change.
 do_set_if_not_set(Key, Value, undefined) ->
