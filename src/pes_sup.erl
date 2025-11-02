@@ -28,19 +28,13 @@ init([]) ->
               shutdown => 1000,
               type => worker,
               modules => [pes_cluster]},
-  Cfg = #{id => cfg,
-          start => {pes_cfg, start_link, []},
-          restart => permanent,
-          shutdown => 1000,
-          type => worker,
-          modules => [pes_cfg]},
   Acceptor = #{id => pes_server_cluster,
                start => {pes_server_sup, start_link, [shard_count()]},
                restart => permanent,
                shutdown => 5000,
                type => supervisor,
                modules => [pes_proxy, pes_server]},
-    {ok, {SupFlags, [Cluster, Cfg, Acceptor]}}.
+    {ok, {SupFlags, [Cluster, Acceptor]}}.
 
 %% internal functions
 

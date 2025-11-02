@@ -62,7 +62,6 @@ init() ->
   ok = net_kernel:monitor_nodes(true),
   {ok, no_state}.
 
-
 -spec handle_message(Info :: term(), State :: term()) ->
   {ok, State :: term()}.
 handle_message({rumor_changed, Rumor}, State) ->
