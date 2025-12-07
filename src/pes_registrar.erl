@@ -313,8 +313,8 @@ handle_read(Ref, Reply, State) ->
           wait(Id, Pid, 16),
           {next_state, prepare, increase_term(NewState)}
       end;
-    {{ok, GetTerm, {Pid, _GuardPid, Timestamp}}, NewState} ->
-      case pes_time:is_expired(Timestamp) of
+    {{ok, GetTerm, {Pid, _GuardPid, TimeStamp}}, NewState} ->
+      case pes_time:is_expired(TimeStamp) of
         true -> % expired
           case is_process_alive(Pid) of
             true ->
@@ -475,7 +475,8 @@ unregister_from_catalog(_StateName, _Id, _Term, _Nodes) ->
 
 is_term_repairable(Server, Id, Term) ->
   case pes_promise:await(pes_server_sup:read(Server, Id)) of
-    {ok, ReadTerm, {OldPid, _OldGuardPid, TimeStamp}} when ReadTerm =:= Term -> % the term remains the same
+    {ok, ReadTerm, {OldPid, _OldGuardPid, TimeStamp}}
+      when ReadTerm =:= Term -> % the term remains the same
       case pes_time:is_expired(TimeStamp) of
         true -> true;
         _ -> not is_process_alive(OldPid)

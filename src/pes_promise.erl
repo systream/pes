@@ -11,10 +11,9 @@
 -include("pes_promise.hrl").
 
 -type pes_promise_reply() :: #promise_reply{}.
--export_type([pes_promise_reply/0]).
-
 -type promise() :: {promise, reference()}.
--export_type([promise/0]).
+
+-export_type([promise/0, pes_promise_reply/0]).
 
 %% API
 -export([async/2, await/1, await/2, reply/2, fake_reply/1, fake_reply/2, resolved/1]).
