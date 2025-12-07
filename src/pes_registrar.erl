@@ -202,14 +202,23 @@ handle_event(state_timeout, heartbeat, monitoring, #state{replies = Replies,
   end;
 handle_event(info, #promise_reply{result = {nack, {Server, OldTerm}}} = Reply, monitoring,
              #state{id = Id, term = Term, pid = Pid, last_timestamp = Now} = State) ->
-  % we are in monitoring phase so we can do repair because we surely have the majority
+  % we are in monitoring phase so we can do repair because we surely have the majority,
+  % or there is a new node joined to the cluster and already have the process running,
+  % let's check for that case, and kill one of them if needed
 
-  % if the repair was success than we convert the nack to an ack,
-  % to handle the situation when too many knew nodes added
-  NewResult = case pes_promise:await(repair(Server, Id, OldTerm, Term, {Pid, self(), Now})) of
-                ack -> ack;
-                _ -> nack
-              end,
+  {OldTermId, _} = OldTerm,
+  NewResult =
+    case is_term_repairable(Server, Id, OldTermId) of
+      true ->
+        % if the repair was success than we convert the nack to an ack,
+        % to handle the situation when too many knew nodes added
+        case pes_promise:await(repair(Server, Id, OldTerm, Term, {Pid, self(), Now})) of
+          ack -> ack;
+          _ -> nack
+        end;
+      _ ->
+        nack
+    end,
   handle_event(info, Reply#promise_reply{result = NewResult}, monitoring, State);
 handle_event(info, #promise_reply{ref = Ref, result = Response} = Reply, monitoring, State) ->
   pes_promise:resolved(Reply),
@@ -463,3 +472,18 @@ unregister_from_catalog(StateName, Id, Term, Nodes)
   committed;
 unregister_from_catalog(_StateName, _Id, _Term, _Nodes) ->
   not_committed.
+
+is_term_repairable(Server, Id, Term) ->
+  case pes_promise:await(pes_server_sup:read(Server, Id)) of
+    {ok, ReadTerm, {OldPid, _OldGuardPid, TimeStamp}} when ReadTerm =:= Term -> % the term remains the same
+      case pes_time:is_expired(TimeStamp) of
+        true -> true;
+        _ -> not is_process_alive(OldPid)
+      end;
+    {ok, ReadTerm, undefined} when ReadTerm =:= Term -> % tombstone able to repair
+      true;
+    not_found ->
+      true;
+    _Else -> % error or the term has changed
+      false
+  end.

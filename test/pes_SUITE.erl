@@ -45,7 +45,8 @@ groups() ->
       register_one_node_not_up_to_date,
       register_previous_record_expired,
       register_previous_record_expired_but_alive,
-      reallocate_guard_process
+      reallocate_guard_process,
+      repair_multiple_processes
     ]
   }].
 
@@ -423,6 +424,57 @@ reallocate_guard_process(Config) ->
   ?assertEqual(lists:sort(CNodes),
                lists:sort(pes:nodes())),
 
+  ok.
+
+repair_multiple_processes(Config) ->
+  pes_cfg:set(heartbeat, 50),
+  ct:sleep(10),
+  [NodeA, NodeB] = proplists:get_value(nodes, Config),
+  Id1 = repair_test_m,
+
+  Tp1 = ?TEST_PROCESS(1500),
+  Tp2 = ?TEST_PROCESS(NodeA, 1500),
+  Tp3 = ?TEST_PROCESS(NodeB, 1500),
+
+  ?assertEqual(yes, pes:register_name(Id1, Tp1)),
+  fake_entry(NodeA, Id1, 2, Tp2),
+  fake_entry(NodeB, Id1, 3, Tp3),
+  % wait for monitor kick begin
+  ct:sleep(pes_cfg:heartbeat() * 2),
+
+  % no majority, registrar should stop
+  ?assertEqual({[undefined, undefined, undefined], []}, rpc:multicall(pes, whereis_name, [Id1])),
+
+  Id2 = repair_test_m2,
+  Tp1n = ?TEST_PROCESS(1500),
+  Tp2n = ?TEST_PROCESS(NodeA, 1500),
+  Tp3n = ?TEST_PROCESS(NodeB, 1),
+
+  ?assertEqual(yes, pes:register_name(Id2, Tp1n)),
+  fake_entry(NodeA, Id2, 3, Tp2n),
+  fake_entry(NodeB, Id2, 3, Tp3n),
+  ct:sleep(10), % wait fot tp3n die
+
+  ?assertEqual({[Tp1n, Tp1n, Tp1n], []}, rpc:multicall(pes, whereis_name, [Id2])),
+  % should repair kicks in
+  ct:sleep(pes_cfg:heartbeat() * 2),
+
+  RecordCheck = fun(Node, Id, Value) ->
+    case pes_promise:await(pes_server_sup:read(Node, Id)) of
+      {ok, _, {ReadPid1, _, _}} ->
+        S = lists:flatten(io_lib:format("~s", [
+          io_lib:format("~p should be ~p instead of ~p (~p) on server ~p", [Id, Value, ReadPid1, node(ReadPid1), Node])
+        ])),
+        ?assertEqual(Value, ReadPid1, S);
+      _ -> ?assert(false, "no proper value in server")
+    end
+  end,
+
+  % all nodes agree on the same value Tp2 killed lately by it's own registar
+  ?assertEqual({[Tp1n, Tp1n, Tp1n], []}, rpc:multicall(pes, whereis_name, [Id2])),
+  RecordCheck(NodeB, Id2, Tp1n),
+
+  pes_cfg:set(heartbeat, 1000),
   ok.
 
 pes_call(Function, Args) ->
