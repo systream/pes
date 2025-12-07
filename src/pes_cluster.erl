@@ -57,9 +57,10 @@ start_link() ->
 
 -spec init() -> {ok, State :: term()}.
 init() ->
-  simple_gossip:subscribe(self(), rumor),
   persistent_term:put(?NODES_KEY, cluster_nodes()),
   ok = net_kernel:monitor_nodes(true),
+  check_for_dead_nodes(),
+  simple_gossip:subscribe(self(), rumor),
   {ok, no_state}.
 
 -spec handle_message(Info :: term(), State :: term()) ->
@@ -110,3 +111,11 @@ wait_until_app_started(OnNode, App) ->
     _ ->
       ok
   end.
+
+check_for_dead_nodes() ->
+  lists:foreach(fun(Node) ->
+                  case net_adm:ping(Node) of
+                    pong -> ok;
+                    _ -> persistent_term:put(?DEAD_NODES_KEY(Node), true)
+                  end
+                end, nodes()).
