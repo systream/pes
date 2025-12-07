@@ -22,7 +22,7 @@
 
 -spec heartbeat() -> pos_integer().
 heartbeat() ->
-  simple_gossip:get(heartbeat, application:get_env(pes, default_heartbeat, ?DEFAULT_HEARTBEAT)).
+  get(heartbeat, application:get_env(pes, default_heartbeat, ?DEFAULT_HEARTBEAT)).
 
 -spec get(term(), term()) -> term().
 get(Key, Default) ->
