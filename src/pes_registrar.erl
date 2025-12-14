@@ -200,6 +200,14 @@ handle_event(state_timeout, heartbeat, monitoring, #state{replies = Replies,
       %?TRACE("cannot_renew timeout ~p", [Answer], State#state.id),
       {stop, {cannot_renew_registration, {timeout, Answer}}, State}
   end;
+handle_event(info, #promise_reply{result = {nack, {Server, not_found}}} = Reply, monitoring,
+             #state{id = Id, term = Term, pid = Pid, last_timestamp = Now} = State) ->
+  % we are in monitoring phase so we can do repair when term not found on server
+  NewResult = case pes_promise:await(repair(Server, Id, not_found, Term, {Pid, self(), Now})) of
+                ack -> ack;
+                _ -> nack
+              end,
+  handle_event(info, Reply#promise_reply{result = NewResult}, monitoring, State);
 handle_event(info, #promise_reply{result = {nack, {Server, OldTerm}}} = Reply, monitoring,
              #state{id = Id, term = Term, pid = Pid, last_timestamp = Now} = State) ->
   % we are in monitoring phase so we can do repair because we surely have the majority,
@@ -244,6 +252,10 @@ handle_event(_EventType, _EventContext, handoff, _State) ->
   % queue all the stuff until handoff is not ready
   {keep_state_and_data, [postpone]};
 
+% transfer is only allowed in monitoring or registered state
+handle_event({call, From}, {update, _}, StateName, _State)
+  when StateName =/= monitoring andalso StateName =/= registered ->
+  {keep_state_and_data, [{reply, From, {error, not_in_proper_state}}]};
 % we need to update the guarded pid
 % @TODO unfortunately if the registration not succeed that the old reg could not be restored
 handle_event({call, From}, {update, NewPid}, _StateName, State) when node(NewPid) =:= node() ->
@@ -252,8 +264,7 @@ handle_event({call, From}, {update, NewPid}, _StateName, State) when node(NewPid
   % If it goes down and the pid is not matched in the state basically we just ignores it.
   erlang:monitor(process, NewPid),
   {next_state, commit, State#state{pid = NewPid, caller = From}};
-handle_event({call, From}, {update, NewPid}, StateName,
-              #state{id = Id, term = Term} = State) ->
+handle_event({call, From}, {update, NewPid}, StateName, #state{id = Id} = State) ->
   % things gets complicated we need too transfer the guard process to the target node
   Now = pes_time:now(),
   Nodes = pes_cluster:nodes(),
@@ -263,9 +274,8 @@ handle_event({call, From}, {update, NewPid}, StateName,
   ),
   TargetNode = node(NewPid),
   {ok, NewGuard} = rpc:call(TargetNode, gen_statem, start, [?MODULE, {handoff, NewState}, []]),
-  CurrentTerm = encapsulate_term(Term),
   NewValue = {NewPid, NewGuard, Now},
-  Promises = [repair(Server, Id, CurrentTerm, NewState#state.term, NewValue) || Server <- Nodes],
+  Promises = [force_repair(Server, Id, NewState#state.term, NewValue) || Server <- Nodes],
   lists:foreach(fun(Promise) -> pes_promise:await(Promise, ?DEFAULT_TIMEOUT) end, Promises),
   ok = gen_statem:call(NewGuard, {handoff_ready, StateName}),
   gen_statem:reply(From, registered),
@@ -436,6 +446,9 @@ commit(Node, Id, Term, Value) ->
 
 repair(Node, Id, OldTerm, NewTerm, Value) ->
   pes_server_sup:repair(Node, Id, OldTerm, encapsulate_term(NewTerm), Value).
+
+force_repair(Node, Id, NewTerm, Value) ->
+  pes_server_sup:force_repair(Node, Id, encapsulate_term(NewTerm), Value).
 
 encapsulate_term(Term) ->
   {Term, self()}.

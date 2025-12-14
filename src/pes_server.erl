@@ -21,7 +21,7 @@
 -compile({no_auto_import, [register/2, is_process_alive/1, send/2]}).
 
 %% API
--export([prepare/3, commit/4, read/2, repair/5]).
+-export([prepare/3, commit/4, read/2, repair/5, force_repair/4]).
 
 -export([start_link/1, init/1, loop/1]).
 -export([system_continue/3, system_terminate/4, system_get_state/1, system_code_change/4]).
@@ -64,10 +64,15 @@ read({Server, Node}, Id) when Node =:= node() ->
 read(Node, Id) ->
   async(Node, {read, Id}).
 
--spec repair(target(), id(), consensus_term_proposal(), consensus_term_proposal(), value()) ->
+-spec repair(target(), id(), consensus_term_proposal() | not_found, consensus_term_proposal(), value()) ->
   pes_promise:promise().
 repair(Node, Id, CurrentTerm, NewTerm, Value) ->
   async(Node, {repair, Id, CurrentTerm, NewTerm, Value}).
+
+-spec force_repair(target(), id(), consensus_term_proposal(), value()) ->
+  pes_promise:promise().
+force_repair(Node, Id, NewTerm, Value) ->
+  async(Node, {repair, Id, NewTerm, Value}).
 
 -spec async(target(), term()) -> pes_promise:promise().
 async({Server, Node}, Command) ->
@@ -143,9 +148,17 @@ handle_command({commit, Id, {Term, Server}, Value}, #state{data_storage_ref = DS
 % Commit can reply with nack and the actual term, and server data.
 % To ensure in the mean time no other registration attempt were made,
 % we need to send back those values.
-handle_command({repair, Id, _Term, {NewTermId, _} = NewTerm, Value},
-                #state{data_storage_ref = DSR,
-                       term_storage_ref = TSR}) ->
+handle_command({repair, Id, Term, NewTerm, Value}, #state{term_storage_ref = TSR} = State) ->
+  case ets:lookup(TSR, Id) of
+    [] -> % if the db is empty than we are good to rewrite stuff
+      handle_command({repair, Id, NewTerm, Value}, State);
+    [{_Id, StoredTerm}] when StoredTerm =:= Term ->
+      handle_command({repair, Id, NewTerm, Value}, State);
+    _ ->
+      nack
+  end;
+handle_command({repair, Id, {NewTermId, _} = NewTerm, Value},
+               #state{data_storage_ref = DSR, term_storage_ref = TSR}) ->
   pes_stat:count([server, repair]),
   true = ets:insert(TSR, {Id, NewTerm}),
   true = ets:insert(DSR, {Id, {NewTermId, Value}, pes_time:now()}),

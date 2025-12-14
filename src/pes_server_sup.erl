@@ -10,7 +10,7 @@
 
 % @TODO different nodes can have different pes_server shard count, and it does not work!!! :/
 
--export([start_link/1, prepare/3, commit/4, read/2, repair/5]).
+-export([start_link/1, prepare/3, commit/4, read/2, repair/5, force_repair/4]).
 
 -export([servers/0]).
 
@@ -35,10 +35,17 @@ read(Node, Id) ->
 -spec repair(node(), Id, Term, NewTerm, term()) ->
   pes_promise:promise() when
   Id :: pes_server:id(),
-  Term :: pes_server:consensus_term_proposal(),
+  Term :: pes_server:consensus_term_proposal() | not_found,
   NewTerm :: {pes_server:consensus_term(), pid()}.
 repair(Node, Id, OldTerm, NewTerm, Value) ->
   pes_server:repair({hash(Id), Node}, Id, OldTerm, NewTerm, Value).
+
+-spec force_repair(node(), Id, NewTerm, term()) ->
+  pes_promise:promise() when
+  Id :: pes_server:id(),
+  NewTerm :: {pes_server:consensus_term(), pid()}.
+force_repair(Node, Id, NewTerm, Value) ->
+  pes_server:force_repair({hash(Id), Node}, Id, NewTerm, Value).
 
 -spec start_link(pos_integer()) -> {ok, pid()}.
 start_link(ServerCount) ->
