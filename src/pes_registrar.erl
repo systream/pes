@@ -282,8 +282,8 @@ handle_event({call, From}, {update, NewPid}, StateName, #state{id = Id} = State)
   {stop, normal, NewState}.
 
 -spec terminate(Reason :: 'normal' | 'shutdown' | {'shutdown', term()} | term(),
-                 State :: state(),
-                 Data :: term()) ->
+                 StateName :: term(),
+                 State :: state()) ->
   ok.
 terminate(_Reason, _State, _Data) ->
   pes_stat:decrease([registrar, active]),

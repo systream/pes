@@ -13,7 +13,7 @@
 -define(DEFAULT_RETRY_COUNT, 3).
 
 %% API
--export([register_name/2, unregister_name/1, whereis_name/1, update/2, lookup/1,
+-export([register_name/2, register/2, unregister_name/1, whereis_name/1, update/2, lookup/1,
          send/2,
          join/1, leave/1, nodes/0,
          stat/0]).
@@ -31,6 +31,13 @@ register_name(Name, Pid) when is_pid(Pid) ->
       logger:notice("Could not register ~p name: ~p", [Name, Reason]),
       no
   end.
+
+-spec register(Name, Pid) ->
+  registered | {error, {could_not_register, Reason :: term()} | {already_registered, pid()} | timeout | term()} when
+  Name :: term(),
+  Pid :: pid().
+register(Name, Pid) when is_pid(Pid) ->
+  pes_registrar:register(Name, Pid).
 
 -spec unregister_name(Name) -> _ when
   Name :: term().
