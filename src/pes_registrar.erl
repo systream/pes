@@ -336,8 +336,14 @@ handle_read(Ref, Reply, State) ->
               repeat_state_and_data
           end;
         false ->
-          reply(State, {error, {already_registered, Pid}}),
-          {stop, normal, NewState}
+          case is_process_alive(Pid) of
+            false ->
+              % if the registered process has surely died
+              {next_state, prepare, increase_term(NewState#state{term = GetTerm})};
+            _ ->
+              reply(State, {error, {already_registered, Pid}}),
+              {stop, normal, NewState}
+          end
       end;
     {{ok, GetTerm, undefined}, NewState = #state{term = Term}} ->
       {next_state, prepare, increase_term(NewState#state{term = max(GetTerm, Term)})};
