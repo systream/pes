@@ -299,7 +299,8 @@ handle_event({call, From}, {update, NewPid}, StateName, #state{id = Id} = State)
     TargetNode = node(NewPid),
     {ok, NewGuard} = rpc:call(TargetNode, gen_statem, start, [?MODULE, {handoff, NewState}, []]),
     NewValue = {NewPid, NewGuard, Now},
-    Promises = [force_repair(Server, Id, NewState#state.term, NewValue) || Server <- Nodes],
+    NewTermTuple = encapsulate_term(NewState#state.term, NewGuard),
+    Promises = [pes_server_sup:force_repair(Server, Id, NewTermTuple, NewValue) || Server <- Nodes],
     lists:foreach(fun(Promise) -> pes_promise:await(Promise, ?DEFAULT_TIMEOUT) end, Promises),
     ok = gen_statem:call(NewGuard, {handoff_ready, StateName}),
     gen_statem:reply(From, registered),
@@ -500,11 +501,11 @@ commit(Node, Id, Term, Value) ->
 repair(Node, Id, OldTerm, NewTerm, Value) ->
     pes_server_sup:repair(Node, Id, OldTerm, encapsulate_term(NewTerm), Value).
 
-force_repair(Node, Id, NewTerm, Value) ->
-    pes_server_sup:force_repair(Node, Id, encapsulate_term(NewTerm), Value).
-
 encapsulate_term(Term) ->
-    {Term, self()}.
+    encapsulate_term(Term, self()).
+
+encapsulate_term(Term, Pid) ->
+  {Term, Pid}.
 
 reply(#state{caller = {_Pid, _ReplyTag} = From}, Response) ->
     gen_statem:reply(From, Response);
