@@ -505,7 +505,7 @@ encapsulate_term(Term) ->
     encapsulate_term(Term, self()).
 
 encapsulate_term(Term, Pid) ->
-  {Term, Pid}.
+    {Term, Pid}.
 
 reply(#state{caller = {_Pid, _ReplyTag} = From}, Response) ->
     gen_statem:reply(From, Response);

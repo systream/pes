@@ -17,6 +17,12 @@ suite() ->
     [{timetrap, {minutes, 10}}].
 
 init_per_suite(Config) ->
+    case node() of
+        nonode@nohost ->
+            net_kernel:start([ct, shortnames]);
+        _ ->
+            ok
+    end,
     application:set_env(pes, heartbeat, ?TEST_HEARTBEAT_TIMEOUT),
     {ok, _} = application:ensure_all_started(pes),
     pes_cfg:set(heartbeat, ?TEST_HEARTBEAT_TIMEOUT),
@@ -455,7 +461,7 @@ repair_multiple_processes(Config) ->
     fake_entry(NodeA, Id1, 2, Tp2),
     fake_entry(NodeB, Id1, 3, Tp3),
     % wait for monitor kick begin
-    ct:sleep(pes_cfg:heartbeat() * 2),
+    ct:sleep(pes_cfg:heartbeat() * 4),
 
     % no majority, registrar should stop
     ?assertEqual({[undefined, undefined, undefined], []}, rpc:multicall(pes, whereis_name, [Id1])),
