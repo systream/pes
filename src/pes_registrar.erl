@@ -297,7 +297,7 @@ handle_event({call, From}, {update, NewPid}, StateName, #state{id = Id} = State)
         Nodes
     ),
     TargetNode = node(NewPid),
-    {ok, NewGuard} = rpc:call(TargetNode, gen_statem, start, [?MODULE, {handoff, NewState}, []]),
+    {ok, NewGuard} = erpc:call(TargetNode, gen_statem, start, [?MODULE, {handoff, NewState}, []]),
     NewValue = {NewPid, NewGuard, Now},
     NewTermTuple = encapsulate_term(NewState#state.term, NewGuard),
     Promises = [pes_server_sup:force_repair(Server, Id, NewTermTuple, NewValue) || Server <- Nodes],
