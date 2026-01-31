@@ -16,7 +16,7 @@
 -export_type([promise/0, pes_promise_reply/0]).
 
 %% API
--export([async/2, await/1, await/2, reply/2, fake_reply/1, fake_reply/2, resolved/1]).
+-export([async/2, await/1, await/2, reply/2, fake_reply/1, fake_reply/2, resolved/1, fake_down_reply/1]).
 
 -spec async({module(), node()} | pid(), term()) -> promise().
 async(Target, Command) ->
@@ -60,6 +60,16 @@ fake_reply(Reply) ->
 fake_reply(Pid, Reply) ->
   Ref = make_ref(),
   send(Pid, #promise_reply{ref = Ref, result = Reply}),
+  {promise, Ref}.
+
+-spec fake_down_reply({module(), node()} | pid()) -> promise().
+fake_down_reply(Target) ->
+  fake_down_reply(self(), Target).
+
+-spec fake_down_reply(pid(), {module(), node()} | pid()) -> promise().
+fake_down_reply(Pid, Target) ->
+  Ref = make_ref(),
+  send(Pid, {'DOWN', Ref, process, Target, noconnection}),
   {promise, Ref}.
 
 -spec send(pid() | {atom(), node()} | reference(), term()) -> ok.

@@ -61,10 +61,16 @@ read({Server, Node}, Id) when Node =:= node() ->
   Result = pes_promise:fake_reply(do_read(Server, Id)),
   pes_stat:count([server, request_count]),
   Result;
-read({Server, Node}, Id) ->
+read({Server, Node} = Target, Id) ->
   % spawn a process on remote send a message is way faster than an rpc call.
-  Pid = spawn(Node, ?MODULE, perform_read_worker, [Server]),
-  pes_promise:async(Pid, {read, Id});
+  case pes_cluster:is_node_alive(Node) of
+    true ->
+      Pid = spawn(Node, ?MODULE, perform_read_worker, [Server]),
+      pes_promise:async(Pid, {read, Id});
+    false ->
+      % fake promise, fake down message
+      pes_promise:fake_down_reply(Target)
+  end;
 read(Node, Id) ->
   async(Node, {read, Id}).
 
@@ -88,15 +94,13 @@ force_repair(Node, Id, NewTerm, Value) ->
   async(Node, {repair, Id, NewTerm, Value}).
 
 -spec async(target(), term()) -> pes_promise:promise().
-async({Server, Node}, Command) ->
+async({_Server, Node} = Target, Command) ->
   case pes_cluster:is_node_alive(Node) of
     true -> %
-      pes_promise:async({Server, Node}, Command);
+      pes_promise:async(Target, Command);
     false ->
       % fake promise, fake down message
-      Ref = make_ref(),
-      self() ! {'DOWN', Ref, process, {Server, Node}, noconnection},
-      {promise, Ref}
+      pes_promise:fake_down_reply(Target)
   end.
 
 -spec start_link(atom()) -> {ok, pid()}.
