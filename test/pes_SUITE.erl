@@ -445,6 +445,11 @@ reallocate_guard_process(Config) ->
         lists:sort(pes:nodes())
     ),
 
+    ?assertEqual(
+      lists:sort(CNodes),
+      lists:sort(pes:live_nodes())
+    ),
+
     ok.
 
 repair_multiple_processes(Config) ->

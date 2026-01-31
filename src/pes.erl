@@ -15,7 +15,7 @@
 %% API
 -export([register_name/2, register/2, unregister_name/1, whereis_name/1, update/2, lookup/1,
          send/2,
-         join/1, leave/1, nodes/0,
+         join/1, leave/1, nodes/0, live_nodes/0,
          stat/0]).
 
 -spec register_name(Name, Pid) -> 'yes' | 'no' when
@@ -176,6 +176,10 @@ leave(Node) ->
 -spec nodes() -> [node()].
 nodes() ->
   pes_cluster:nodes().
+
+-spec live_nodes() -> [node()].
+live_nodes() ->
+  pes_cluster:live_nodes().
 
 -spec stat() -> [{list(atom()), number()}].
 stat() ->
