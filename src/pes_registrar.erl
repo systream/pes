@@ -540,8 +540,9 @@ set_nodes(State, Nodes) ->
 
 unregister_from_catalog(StateName, Id, Term, Nodes) when
     StateName =:= monitoring orelse StateName =:= registered
-->
-    [commit(Node, Id, Term, undefined) || Node <- Nodes],
+  ->
+    Promises = [commit(Node, Id, Term, undefined) || Node <- Nodes],
+    [pes_promise:await(P, ?DEFAULT_TIMEOUT) || P <- Promises],
     committed;
 unregister_from_catalog(_StateName, _Id, _Term, _Nodes) ->
     not_committed.

@@ -23,7 +23,7 @@
 %% API
 -export([prepare/3, commit/4, read/2, repair/5, force_repair/4]).
 
--export([start_link/1, init/1, loop/1]).
+-export([start_link/1, init/1, loop/1, perform_read_worker/1]).
 -export([system_continue/3, system_terminate/4, system_get_state/1, system_code_change/4]).
 
 -define(DEFAULT_CLEANUP_TIMEOUT, 5001).
@@ -37,7 +37,7 @@
 
 -record(state, {
   term_storage_ref :: ets:tid(),
-  data_storage_ref :: ets:tid()
+  data_storage_ref :: ets:tid() | atom()
 }).
 
 -opaque state() :: #state{}.
@@ -61,8 +61,21 @@ read({Server, Node}, Id) when Node =:= node() ->
   Result = pes_promise:fake_reply(do_read(Server, Id)),
   pes_stat:count([server, request_count]),
   Result;
+read({Server, Node}, Id) ->
+  % spawn a process on remote send a message is way faster than an rpc call.
+  Pid = spawn(Node, ?MODULE, perform_read_worker, [Server]),
+  pes_promise:async(Pid, {read, Id});
 read(Node, Id) ->
   async(Node, {read, Id}).
+
+-spec perform_read_worker(atom()) -> no_return().
+perform_read_worker(Server) ->
+  receive
+    #pes_promise_call{from = From, command = {read, Id}} ->
+      Reply = do_read(Server, Id),
+      pes_stat:count([server, request_count]),
+      pes_promise:reply(From, Reply)
+  end.
 
 -spec repair(target(), id(), consensus_term_proposal() | not_found, consensus_term_proposal(), value()) ->
   pes_promise:promise().
@@ -96,7 +109,7 @@ init(Server) ->
   proc_lib:init_ack({ok, self()}),
   schedule_cleanup(),
   loop(#state{term_storage_ref = ets:new(?TERM_STORAGE, [protected]),
-              data_storage_ref = ets:new(Server, [named_table, protected])}).
+              data_storage_ref = ets:new(Server, [named_table, protected, {read_concurrency, true}])}).
 
 -spec loop(state()) -> no_return().
 loop(State) ->
@@ -206,7 +219,7 @@ schedule_cleanup() ->
   erlang:send_after(RescheduleTime + rand:uniform(250), self(), cleanup),
   ok.
 
--spec do_read(ets:tid(), term()) ->
+-spec do_read(ets:tid() | atom(), term()) ->
   {ok, consensus_term(), term()} | not_found.
 do_read(Ets, Id) ->
   case ets:lookup(Ets, Id) of

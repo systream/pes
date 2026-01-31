@@ -18,7 +18,7 @@
 %% API
 -export([async/2, await/1, await/2, reply/2, fake_reply/1, fake_reply/2, resolved/1]).
 
--spec async({module(), node()}, term()) -> promise().
+-spec async({module(), node()} | pid(), term()) -> promise().
 async(Target, Command) ->
   Ref = erlang:monitor(process, Target, [{alias, reply_demonitor}]),
   send(Target, #pes_promise_call{from = Ref, command = Command}),
