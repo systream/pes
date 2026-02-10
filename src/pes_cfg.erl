@@ -29,7 +29,7 @@ get(Key, Default) ->
   SGKey = {?MODULE, Key},
   case simple_gossip:get(SGKey, {default, Default}) of
     {default, Default} ->
-      ok = simple_gossip:set(fun(Status) -> do_set_if_not_set(SGKey, Default, Status) end),
+      ok = set(SGKey, Default),
       Default;
     Result ->
       Result
@@ -38,11 +38,3 @@ get(Key, Default) ->
 -spec set(term(), term()) -> ok.
 set(Key, Value) ->
   simple_gossip:set({?MODULE, Key}, Value).
-
--spec do_set_if_not_set(term(), term(), undefined | map()) -> {change, map()} | no_change.
-do_set_if_not_set(Key, Value, undefined) ->
-  {change, #{Key => Value}};
-do_set_if_not_set(Key, _Value, Data) when is_map_key(Key, Data) ->
-  no_change;
-do_set_if_not_set(Key, Value, Data) ->
-  {change, Data#{Key => Value}}.
