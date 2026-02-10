@@ -5,7 +5,7 @@
  {<<"setup">>,{pkg,<<"setup">>,<<"2.1.0">>},1},
  {<<"simple_gossip">>,
   {git,"https://github.com/systream/simple_gossip.git",
-       {ref,"df2015fc1ff9dfbb86cee5bde931680c3b28be8f"}},
+       {ref,"1e17a0043f4222e70347c73c8aaf642a7ca742d2"}},
   0}]}.
 [
 {pkg_hash,[
