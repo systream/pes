@@ -29,7 +29,7 @@ get(Key, Default) ->
   SGKey = {?MODULE, Key},
   case simple_gossip:get(SGKey, {default, Default}) of
     {default, Default} ->
-      ok = set(SGKey, Default),
+      ok = set(Key, Default),
       Default;
     Result ->
       Result
