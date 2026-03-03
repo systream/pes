@@ -13,7 +13,7 @@
 
 -define(DEFAULT_TIMEOUT, 5000).
 -define(HANDOFF_TIMEOUT, 15000).
--define(JITTER_RANGE, 150).
+-define(JITTER_RANGE, 250).
 
 %-define(trace(Msg, Args), io:format(user, Msg ++ "~n", Args)).
 %-define(TRACE(Msg, Args, Id), logger:warning(Msg, Args, #{node => node(), cid => Id,
