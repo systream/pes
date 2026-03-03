@@ -446,8 +446,8 @@ reallocate_guard_process(Config) ->
     ),
 
     ?assertEqual(
-      lists:sort(CNodes),
-      lists:sort(pes:live_nodes())
+        lists:sort(CNodes),
+        lists:sort(pes:live_nodes())
     ),
 
     ok.

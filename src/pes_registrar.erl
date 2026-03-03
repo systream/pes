@@ -13,6 +13,7 @@
 
 -define(DEFAULT_TIMEOUT, 5000).
 -define(HANDOFF_TIMEOUT, 15000).
+-define(JITTER_RANGE, 150).
 
 %-define(trace(Msg, Args), io:format(user, Msg ++ "~n", Args)).
 %-define(TRACE(Msg, Args, Id), logger:warning(Msg, Args, #{node => node(), cid => Id,
@@ -195,7 +196,8 @@ handle_event(enter, _, monitoring, #state{id = Id, term = Term, pid = Pid} = Sta
     %?trace("Entered monitoring", [], State#state.id),
     Now = pes_time:now(),
     Data = {Pid, self(), Now},
-    HeartBeat = pes_cfg:heartbeat() + rand:uniform(5),
+    Jitter = rand:uniform(?JITTER_RANGE * 2) - ?JITTER_RANGE,
+    HeartBeat = max(1000, pes_cfg:heartbeat() + Jitter),
     Nodes = pes_cluster:nodes(),
     NewState = set_promises(
         [commit(Node, Id, Term, Data) || Node <- Nodes], set_nodes(State, Nodes)
