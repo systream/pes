@@ -99,7 +99,6 @@ lookup(Name, Retry, Timeout) ->
     {'$reply', Ref, {error, no_consensus}} ->
       {error, no_consensus}
   after Timeout ->
-    erlang:demonitor(Ref, [flush]),
     exit(Gatherer, kill),
     {error, timeout}
   end.
