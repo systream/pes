@@ -104,7 +104,7 @@ handle_message({nodedown, Node}, State) ->
   {ok, State}.
 
 wait_until_app_started(OnNode, App) ->
-  case rpc:call(OnNode, application_controller, is_running, [App]) of
+  case rpc:call(OnNode, application_controller, is_running, [App], 5000) of
     false ->
       timer:sleep(100),
       wait_until_app_started(OnNode, App);

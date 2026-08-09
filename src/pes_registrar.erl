@@ -487,7 +487,7 @@ set_promises(Promises, State) ->
 
 -spec is_process_alive(pid()) -> true | false | unknown.
 is_process_alive(Pid) ->
-    case rpc:call(node(Pid), erlang, is_process_alive, [Pid]) of
+    case rpc:call(node(Pid), erlang, is_process_alive, [Pid], 2000) of
         {badrpc, _} ->
             unknown;
         Else ->
